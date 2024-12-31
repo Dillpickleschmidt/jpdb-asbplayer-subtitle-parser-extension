@@ -33,8 +33,8 @@ export const initializeSubtitleHandler = () => {
       } catch (error) {
         console.error("Error processing subtitle:", error)
         const errorSpan = document.createElement("span")
-        errorSpan.className = "cr-subtitle character-count"
-        errorSpan.textContent = "Processing error"
+        errorSpan.className = "jpdb-word jpdb-unparsed"
+        errorSpan.textContent = element.textContent?.trim() || "" // Show original (uncolored) text
         element.parentNode?.insertBefore(errorSpan, element.nextSibling)
       }
     }

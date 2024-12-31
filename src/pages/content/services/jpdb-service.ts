@@ -26,15 +26,9 @@ export const processJpdb = async (text: string): Promise<HTMLSpanElement> => {
   })
 
   if (!jpdbResponse.success) {
-    const errorDetails = jpdbResponse.error
-    const errorCode = errorDetails.code || "UNKNOWN_ERROR"
-    const errorMessage = errorDetails.message || errorDetails
-
-    console.error(`Error fetching JPDB data: [${errorCode}] ${errorMessage}`)
-    throw new Error(`[${errorCode}] ${errorMessage}`)
+    console.error("JPDB Error Response:", jpdbResponse)
+    throw jpdbResponse // Pass the full error response up
   }
-
-  console.log("JPDB API Response:", jpdbResponse.data)
 
   const containerSpan = document.createElement("span")
   let currentPosition = 0
@@ -100,7 +94,5 @@ export const processJpdb = async (text: string): Promise<HTMLSpanElement> => {
 
   // Add any remaining non-parsed text
   addNonParsedText(text, currentPosition, text.length)
-
-  console.log("Final DOM structure:", containerSpan.outerHTML)
   return containerSpan
 }
