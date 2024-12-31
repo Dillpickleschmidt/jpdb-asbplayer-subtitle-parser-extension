@@ -123,8 +123,10 @@ export const createSubtitleObserver = (
 
 // Separate observer for offscreen subtitles
 export const createOffscreenSubtitleObserver = (
-  updateCallback: (element: HTMLElement) => void
+  updateCallback: (element: HTMLElement) => void,
+  onComplete: () => void // Callback to signal all spans have been collected
 ) => {
+  let complete = true
   const offscreenObserver = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
       mutation.addedNodes.forEach((node) => {
@@ -140,11 +142,16 @@ export const createOffscreenSubtitleObserver = (
               .forEach((el) => {
                 console.log("Offscreen subtitle:", el.textContent)
                 updateCallback(el as HTMLElement)
+                complete = false
               })
           }
         }
       })
     })
+    if (!complete) {
+      onComplete()
+      complete = true
+    }
   })
 
   const bind = () => {

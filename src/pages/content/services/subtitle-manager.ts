@@ -8,7 +8,8 @@ import {
 // Coordinates subtitle observation across different contexts (main window, iframes)
 export const createSubtitleManager = (
   updateCallback: (element: HTMLElement) => void,
-  offscreenCallback: (element: HTMLElement) => void
+  offscreenCallback: (element: HTMLElement) => void,
+  onComplete: () => void // Callback to signal all offscreen spans are collected
 ) => {
   const isParentDocument = window.self === window.top
   const frameHandlers = createFrameHandlers(isParentDocument)
@@ -16,7 +17,10 @@ export const createSubtitleManager = (
     updateCallback,
     frameHandlers.frameInfoListener
   )
-  const offscreenObserver = createOffscreenSubtitleObserver(offscreenCallback)
+  const offscreenObserver = createOffscreenSubtitleObserver(
+    offscreenCallback,
+    onComplete
+  )
 
   const bind = () => {
     observer.bind()

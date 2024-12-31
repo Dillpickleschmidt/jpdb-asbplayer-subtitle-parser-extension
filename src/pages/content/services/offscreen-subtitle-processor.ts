@@ -1,11 +1,47 @@
+// offscreen-subtitle-processor.ts
+
+export type ProcessingState = {
+  subtitles: string[]
+  groups: string[][]
+  lastProcessedText: string
+  processedGroups: Set<number> // Track which group indices we've processed
+}
+
 /**
- * Groups subtitle text into chunks of approximately 16000 characters.
- * @param subtitles - Array of subtitle text.
- * @returns Array of grouped subtitle strings.
+ * Creates grouped chunks from offscreen subtitles
  */
-const groupSubtitles = (subtitles: string[]): string[] => {
-  const MAX_GROUP_SIZE = 16000
-  const groups: string[] = []
+export function createSubtitleGroups(elements: HTMLElement[]): ProcessingState {
+  console.log(`Processing ${elements.length} offscreen elements`)
+  const subtitles: string[] = []
+
+  // Collect all subtitles
+  for (let i = 0; i < elements.length; i++) {
+    let text = elements[i].textContent?.trim() || ""
+    while (text.endsWith("➡") && i < elements.length - 1) {
+      const nextText = elements[i + 1].textContent?.trim() || ""
+      text = text.slice(0, -1) + nextText
+      i++
+    }
+
+    if (text) {
+      subtitles.push(text)
+    }
+  }
+
+  console.log(`Collected ${subtitles.length} subtitles`)
+
+  if (subtitles.length === 0) {
+    return {
+      subtitles: [],
+      groups: [],
+      lastProcessedText: "",
+      processedGroups: new Set(),
+    }
+  }
+
+  // Create initial groups
+  const MAX_GROUP_SIZE = 400
+  const groups: string[][] = []
   let currentGroup: string[] = []
   let currentLength = 0
 
@@ -13,7 +49,7 @@ const groupSubtitles = (subtitles: string[]): string[] => {
     const subtitleLength = subtitle.length
 
     if (currentLength + subtitleLength > MAX_GROUP_SIZE) {
-      groups.push(currentGroup.join(" "))
+      groups.push(currentGroup)
       currentGroup = []
       currentLength = 0
     }
@@ -23,28 +59,55 @@ const groupSubtitles = (subtitles: string[]): string[] => {
   }
 
   if (currentGroup.length > 0) {
-    groups.push(currentGroup.join(" "))
+    groups.push(currentGroup)
   }
 
-  return groups
+  return {
+    subtitles,
+    groups,
+    lastProcessedText: "",
+    processedGroups: new Set(),
+  }
 }
 
 /**
- * Processes offscreen subtitles by grouping them into chunks and preparing for further processing.
- * @param elements - Array of HTMLElements containing subtitle text.
+ * Finds and processes a window of groups around the target subtitle
  */
-export default async function handleOffscreenSubtitles(
-  elements: HTMLElement[]
-) {
-  const subtitles = elements
-    .map((el) => el.textContent?.trim() || "")
-    .filter(Boolean)
-
-  if (subtitles.length === 0) return
-
-  const groups = groupSubtitles(subtitles)
-  for (const group of groups) {
-    console.log(`Sending group to ichi.moe: ${group}`)
-    // TODO: Add ichi.moe API call logic here
+export function processSubtitleWindow(
+  text: string,
+  state: ProcessingState
+): void {
+  if (text === state.lastProcessedText) {
+    return
   }
+
+  // Find which group contains our subtitle
+  const groupIndex = state.groups.findIndex((group) => group.includes(text))
+
+  if (groupIndex === -1) {
+    console.log("Current subtitle not found in any group:", text)
+    return
+  }
+
+  // Get window of groups
+  const windowStart = Math.max(0, groupIndex - 2) // 2 groups before
+  const windowEnd = Math.min(state.groups.length, groupIndex + 8) // 7 groups after
+
+  console.log(`Processing groups ${windowStart} to ${windowEnd - 1}`)
+
+  // Process the group window, skipping already processed groups
+  for (let i = windowStart; i < windowEnd; i++) {
+    if (!state.processedGroups.has(i)) {
+      const combinedSubtitles = state.groups[i].join(" ")
+      console.log(
+        `Sending group ${i} to ichi.moe (${combinedSubtitles.length} chars):`,
+        combinedSubtitles
+      )
+      state.processedGroups.add(i)
+    } else {
+      console.log(`Skipping previously processed group ${i}`)
+    }
+  }
+
+  state.lastProcessedText = text
 }

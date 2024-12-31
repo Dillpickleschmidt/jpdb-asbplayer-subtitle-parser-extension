@@ -1,13 +1,19 @@
+// SubtitleStyler.ts
 import { createEffect, onCleanup } from "solid-js"
 import { processJpdb } from "../services/jpdb-service"
-import handleOffscreenSubtitles from "../services/offscreen-subtitle-processor"
+import {
+  type ProcessingState,
+  createSubtitleGroups,
+  processSubtitleWindow,
+} from "../services/offscreen-subtitle-processor"
 import { createSubtitleManager } from "../services/subtitle-manager"
 import "../styles/subtitle.css"
 
 export const initializeSubtitleHandler = () => {
   createEffect(() => {
-    let offscreenSubtitleCollection: HTMLElement[] = []
-    let isOffscreenProcessed = false
+    const offscreenSubtitleCollection: HTMLElement[] = []
+    let state: ProcessingState | null = null
+    let hasProcessedOffscreen = false
 
     const updateSubtitle = async (element: HTMLElement) => {
       // Skip if already processed or if next element is our processed subtitle
@@ -15,7 +21,12 @@ export const initializeSubtitleHandler = () => {
 
       try {
         const text = element.textContent?.trim() || ""
-        console.log("Processing subtitle text:", text)
+        console.log("Detected onscreen subtitle:", text)
+
+        // Process the subtitle if we have state
+        if (state) {
+          processSubtitleWindow(text, state)
+        }
 
         const resultSpan = document.createElement("span")
         resultSpan.className = "cr-subtitle"
@@ -42,21 +53,25 @@ export const initializeSubtitleHandler = () => {
     }
 
     const updateOffscreenSubtitle = (element: HTMLElement) => {
-      if (!isOffscreenProcessed) {
+      // Only collect subtitles if we haven't processed them yet
+      if (!hasProcessedOffscreen) {
         offscreenSubtitleCollection.push(element)
+      }
+    }
 
-        // Simulate a check for all spans being collected
-        if (true) {
-          /* condition to determine all spans are collected */
-          handleOffscreenSubtitles(offscreenSubtitleCollection)
-          isOffscreenProcessed = true
-        }
+    const onObservationComplete = () => {
+      // Only process offscreen subtitles once
+      if (!hasProcessedOffscreen) {
+        console.log("Processing initial offscreen subtitle collection")
+        state = createSubtitleGroups(offscreenSubtitleCollection)
+        hasProcessedOffscreen = true
       }
     }
 
     const { bind, unbind } = createSubtitleManager(
       updateSubtitle,
-      updateOffscreenSubtitle
+      updateOffscreenSubtitle,
+      onObservationComplete
     )
 
     bind()
