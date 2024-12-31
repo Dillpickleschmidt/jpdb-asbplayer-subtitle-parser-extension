@@ -1,8 +1,16 @@
-import { render } from "solid-js/web";
-import App from "./components/Demo/app";
+import { render } from "solid-js/web"
+import "../../styles/index.css"
+import { ControlPanel } from "./components/ControlPanel"
+import { initializeSubtitleHandler } from "./components/SubtitleStyler"
 
-const root = document.createElement("div");
-root.id = "extension-root";
-document.body.append(root);
+// Initialize subtitle handling in all frames
+initializeSubtitleHandler()
 
-render(App, root);
+// Only mount UI in main window
+if (window.self === window.top) {
+  const root = document.createElement("div")
+  root.id = "extension-root"
+  document.body.append(root)
+
+  render(() => <ControlPanel />, root)
+}
