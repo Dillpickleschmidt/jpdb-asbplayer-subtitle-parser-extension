@@ -4,6 +4,8 @@ import { parseIchiMoe } from "./ichi-moe-parser"
 
 export const processJpdb = async (text: string): Promise<HTMLSpanElement> => {
   const url = `https://ichi.moe/cl/qr/?q=${encodeURIComponent(text)}`
+
+  // Fetch Ichi.moe data via background worker
   const ichiResponse = await chrome.runtime.sendMessage({
     type: "FETCH_ICHI_MOE",
     url: url,
@@ -14,20 +16,18 @@ export const processJpdb = async (text: string): Promise<HTMLSpanElement> => {
   }
 
   const parsedResults = parseIchiMoe(ichiResponse.data)
-  console.log("Ichi.moe parsed results:", parsedResults)
 
   // Flatten root words for JPDB
   const flattened = parsedResults.rootWords.flat().join(" ")
 
-  // Get JPDB data
+  // Fetch JPDB data via background worker
   const jpdbResponse = await chrome.runtime.sendMessage({
-    type: "FETCH_JPDB",
-    text: flattened,
+    type: "JPDB_parseText",
+    args: [flattened],
   })
 
   if (!jpdbResponse.success) {
-    console.error("JPDB Error Response:", jpdbResponse)
-    throw jpdbResponse // Pass the full error response up
+    throw new Error(jpdbResponse.error)
   }
 
   const containerSpan = document.createElement("span")
@@ -61,7 +61,7 @@ export const processJpdb = async (text: string): Promise<HTMLSpanElement> => {
   const jpdbVocabulary = jpdbResponse.data.vocabulary
 
   parsedResults.separatedCompounds.forEach((splitItem, i) => {
-    const rootItem = parsedResults.rootWords[i] // rootWords same index as separatedCompounds
+    const rootItem = parsedResults.rootWords[i]
 
     if (Array.isArray(splitItem)) {
       // Handle compound words
@@ -79,7 +79,7 @@ export const processJpdb = async (text: string): Promise<HTMLSpanElement> => {
       })
     } else {
       // Handle single words
-      const rootWord = Array.isArray(rootItem) ? rootItem[0] : rootItem // Safely extract first element if it's an array
+      const rootWord = Array.isArray(rootItem) ? rootItem[0] : rootItem
       const startIdx = text.indexOf(splitItem, currentPosition)
 
       if (startIdx !== -1) {
