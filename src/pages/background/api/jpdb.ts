@@ -74,6 +74,27 @@ export async function parseText(text: string) {
   })
 }
 
+export async function parseTextBatch(texts: string[]) {
+  return makeRequest("parse", {
+    text: texts,
+    token_fields: ["vocabulary_index", "position", "length", "furigana"],
+    position_length_encoding: "utf16",
+    vocabulary_fields: [
+      "vid",
+      "sid",
+      "rid",
+      "spelling",
+      "reading",
+      "frequency_rank",
+      "part_of_speech",
+      "meanings_chunks",
+      "meanings_part_of_speech",
+      "card_state",
+      "pitch_accent",
+    ],
+  })
+}
+
 export async function addToDeck(
   vid: number,
   sid: number,

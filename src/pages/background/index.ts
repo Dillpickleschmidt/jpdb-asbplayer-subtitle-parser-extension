@@ -1,3 +1,4 @@
+// background/index.ts
 import { fetchIchiMoe } from "./api/ichi-moe"
 import * as JpdbApi from "./api/jpdb"
 

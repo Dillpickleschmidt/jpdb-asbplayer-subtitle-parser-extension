@@ -1,16 +1,17 @@
-// SubtitleStyler.ts
 import { createEffect, onCleanup } from "solid-js"
 import { processJpdb } from "../services/jpdb-service"
+import handleOffscreenSubtitles from "../services/offscreen-subtitle-processor"
 import { createSubtitleManager } from "../services/subtitle-manager"
-import "../styles/subtitle.css" // Updated path for subtitle CSS
+import "../styles/subtitle.css"
 
 export const initializeSubtitleHandler = () => {
   createEffect(() => {
+    let offscreenSubtitleCollection: HTMLElement[] = []
+    let isOffscreenProcessed = false
+
     const updateSubtitle = async (element: HTMLElement) => {
       // Skip if already processed or if next element is our processed subtitle
-      if (element.nextElementSibling?.classList.contains("cr-subtitle")) {
-        return
-      }
+      if (element.nextElementSibling?.classList.contains("cr-subtitle")) return
 
       try {
         const text = element.textContent?.trim() || ""
@@ -32,6 +33,7 @@ export const initializeSubtitleHandler = () => {
         element.removeAttribute("style")
       } catch (error) {
         console.error("Error processing subtitle:", error)
+
         const errorSpan = document.createElement("span")
         errorSpan.className = "jpdb-word jpdb-unparsed"
         errorSpan.textContent = element.textContent?.trim() || ""
@@ -39,7 +41,24 @@ export const initializeSubtitleHandler = () => {
       }
     }
 
-    const { bind, unbind } = createSubtitleManager(updateSubtitle)
+    const updateOffscreenSubtitle = (element: HTMLElement) => {
+      if (!isOffscreenProcessed) {
+        offscreenSubtitleCollection.push(element)
+
+        // Simulate a check for all spans being collected
+        if (true) {
+          /* condition to determine all spans are collected */
+          handleOffscreenSubtitles(offscreenSubtitleCollection)
+          isOffscreenProcessed = true
+        }
+      }
+    }
+
+    const { bind, unbind } = createSubtitleManager(
+      updateSubtitle,
+      updateOffscreenSubtitle
+    )
+
     bind()
     onCleanup(unbind)
   })

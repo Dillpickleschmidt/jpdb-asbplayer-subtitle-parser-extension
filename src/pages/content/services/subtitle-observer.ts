@@ -24,7 +24,7 @@ export const createSubtitleObserver = (
             node.matches(
               ".asbplayer-subtitles-container-bottom .asbplayer-subtitles span"
             ) &&
-            !node.classList.contains("cr-subtitle") // Add this check
+            !node.classList.contains("cr-subtitle")
           ) {
             updateCallback(node)
           }
@@ -116,6 +116,48 @@ export const createSubtitleObserver = (
   const unbind = () => {
     mainObserver.disconnect()
     shadowObserver.disconnect()
+  }
+
+  return { bind, unbind }
+}
+
+// Separate observer for offscreen subtitles
+export const createOffscreenSubtitleObserver = (
+  updateCallback: (element: HTMLElement) => void
+) => {
+  const offscreenObserver = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      mutation.addedNodes.forEach((node) => {
+        if (node instanceof HTMLElement) {
+          if (
+            node.matches("body > div.asbplayer-offscreen > div > span") ||
+            node.querySelector("body > div.asbplayer-offscreen > div > span")
+          ) {
+            node
+              .querySelectorAll(
+                "body > div.asbplayer-offscreen > div > span:not(.cr-subtitle)"
+              )
+              .forEach((el) => {
+                console.log("Offscreen subtitle:", el.textContent)
+                updateCallback(el as HTMLElement)
+              })
+          }
+        }
+      })
+    })
+  })
+
+  const bind = () => {
+    offscreenObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["style", "class"],
+    })
+  }
+
+  const unbind = () => {
+    offscreenObserver.disconnect()
   }
 
   return { bind, unbind }
