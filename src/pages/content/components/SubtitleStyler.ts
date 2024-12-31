@@ -7,34 +7,34 @@ import "../styles/subtitle.css" // Updated path for subtitle CSS
 export const initializeSubtitleHandler = () => {
   createEffect(() => {
     const updateSubtitle = async (element: HTMLElement) => {
-      if (
-        element.classList.contains("hidden") ||
-        element.nextElementSibling?.classList.contains("character-count")
-      ) {
+      // Skip if already processed or if next element is our processed subtitle
+      if (element.nextElementSibling?.classList.contains("cr-subtitle")) {
         return
       }
-
-      element.removeAttribute("style")
-      element.classList.add("hidden")
 
       try {
         const text = element.textContent?.trim() || ""
         console.log("Processing subtitle text:", text)
 
         const resultSpan = document.createElement("span")
-        resultSpan.className = "cr-subtitle character-count"
+        resultSpan.className = "cr-subtitle"
 
         const processedContent = await processJpdb(text)
         resultSpan.appendChild(processedContent)
 
         console.log("Final DOM structure:", resultSpan.outerHTML)
 
+        // Insert the new span after the original
         element.parentNode?.insertBefore(resultSpan, element.nextSibling)
+
+        // Hide the original span
+        element.classList.add("hidden")
+        element.removeAttribute("style")
       } catch (error) {
         console.error("Error processing subtitle:", error)
         const errorSpan = document.createElement("span")
         errorSpan.className = "jpdb-word jpdb-unparsed"
-        errorSpan.textContent = element.textContent?.trim() || "" // Show original (uncolored) text
+        errorSpan.textContent = element.textContent?.trim() || ""
         element.parentNode?.insertBefore(errorSpan, element.nextSibling)
       }
     }

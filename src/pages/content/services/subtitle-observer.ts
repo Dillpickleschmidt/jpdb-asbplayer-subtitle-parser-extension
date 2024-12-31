@@ -15,7 +15,7 @@ export const createSubtitleObserver = (
       mutation.addedNodes.forEach((node) => {
         if (node instanceof HTMLElement) {
           // Skip if this is one of our character count spans
-          if (node.classList.contains("character-count")) {
+          if (node.classList.contains("cr-subtitle")) {
             return
           }
 
@@ -24,7 +24,7 @@ export const createSubtitleObserver = (
             node.matches(
               ".asbplayer-subtitles-container-bottom .asbplayer-subtitles span"
             ) &&
-            !node.classList.contains("character-count") // Add this check
+            !node.classList.contains("cr-subtitle") // Add this check
           ) {
             updateCallback(node)
           }
@@ -32,7 +32,7 @@ export const createSubtitleObserver = (
           // Check child nodes, excluding our count spans
           node
             .querySelectorAll(
-              ".asbplayer-subtitles-container-bottom .asbplayer-subtitles span:not(.character-count)"
+              ".asbplayer-subtitles-container-bottom .asbplayer-subtitles span:not(.cr-subtitle)"
             )
             .forEach((el) => updateCallback(el as HTMLElement))
         }
@@ -46,7 +46,7 @@ export const createSubtitleObserver = (
       if (target instanceof Element && target.shadowRoot) {
         target.shadowRoot
           .querySelectorAll(
-            ".asbplayer-subtitles-container-bottom .asbplayer-subtitles span:not(.character-count)"
+            ".asbplayer-subtitles-container-bottom .asbplayer-subtitles span:not(.cr-subtitle)"
           )
           .forEach((el) => updateCallback(el as HTMLElement))
       }
