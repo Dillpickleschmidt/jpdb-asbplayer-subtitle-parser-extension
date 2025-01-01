@@ -1,5 +1,5 @@
 // ichi-moe-parser.ts
-import type { ParsedResults } from "../types"
+import { IchiMoeParseResult } from "../types"
 
 // List of words that should not have compounds separated
 const DONT_SEPARATE_WORDS = new Set([
@@ -20,13 +20,13 @@ const cleanWords = (
   return words.map((w) => (Array.isArray(w) ? w.map(cleanWord) : cleanWord(w)))
 }
 
-export const parseIchiMoe = (htmlContent: string): ParsedResults => {
+export const parseIchiMoe = (htmlContent: string): IchiMoeParseResult => {
   const parser = new DOMParser()
   const doc = parser.parseFromString(htmlContent, "text/html")
 
-  const unmodifiedWords: string[] = []
-  const separatedCompounds: (string | string[])[] = []
-  const rootWords: (string | string[])[] = []
+  const surfaceForms: string[] = []
+  const separatedForms: (string | string[])[] = []
+  const baseForms: (string | string[])[] = []
 
   // Find all gloss divs
   const glossDivs = doc.querySelectorAll("div.gloss")
@@ -37,13 +37,13 @@ export const parseIchiMoe = (htmlContent: string): ParsedResults => {
     const mainWord = mainWordTag?.textContent?.trim()
 
     if (mainWord) {
-      unmodifiedWords.push(mainWord)
+      surfaceForms.push(mainWord)
     }
 
     // Check if this word should be kept unseparated
     if (mainWord && DONT_SEPARATE_WORDS.has(cleanWord(mainWord))) {
-      rootWords.push(mainWord)
-      separatedCompounds.push(mainWord)
+      baseForms.push(mainWord)
+      separatedForms.push(mainWord)
       return // Skip further processing for this word
     }
 
@@ -52,7 +52,7 @@ export const parseIchiMoe = (htmlContent: string): ParsedResults => {
     const alternativesTag = gloss.querySelector("dl.alternatives")
 
     if (compoundTag) {
-      // Extract compound parts for separatedCompounds
+      // Extract compound parts for separatedForms
       const compoundParts = compoundTag.querySelectorAll(":scope > dt")
       const current_split = Array.from(compoundParts).map(
         (part) => part.textContent?.trim() ?? ""
@@ -62,14 +62,14 @@ export const parseIchiMoe = (htmlContent: string): ParsedResults => {
       if (
         current_split.some((part) => DONT_SEPARATE_WORDS.has(cleanWord(part)))
       ) {
-        rootWords.push(mainWord!)
-        separatedCompounds.push(mainWord!)
+        baseForms.push(mainWord!)
+        separatedForms.push(mainWord!)
         return // Skip further processing
       }
 
-      separatedCompounds.push(current_split)
+      separatedForms.push(current_split)
 
-      // Extract lowermost parts for rootWords
+      // Extract lowermost parts for baseForms
       const compRootDds = compoundTag.querySelectorAll(":scope > dd")
       const current_roots: string[] = []
 
@@ -87,33 +87,37 @@ export const parseIchiMoe = (htmlContent: string): ParsedResults => {
         }
       })
 
-      rootWords.push(current_roots)
+      baseForms.push(current_roots)
     } else if (alternativesTag) {
       const dd = alternativesTag.querySelector("dd")
       const dtElement = dd?.querySelector("dt")
 
       if (dtElement?.textContent) {
-        rootWords.push(dtElement.textContent.trim())
-        separatedCompounds.push(mainWord ?? "")
+        baseForms.push(dtElement.textContent.trim())
+        separatedForms.push(mainWord ?? "")
       } else if (mainWord) {
-        rootWords.push(mainWord)
-        separatedCompounds.push(mainWord)
+        baseForms.push(mainWord)
+        separatedForms.push(mainWord)
       }
     } else if (mainWord) {
-      rootWords.push(mainWord)
-      separatedCompounds.push(mainWord)
+      baseForms.push(mainWord)
+      separatedForms.push(mainWord)
     }
   })
 
   // Properly type the cleaned results
-  const cleanedUnmodified = cleanWords(unmodifiedWords) as string[]
-  const cleanedSplit = cleanWords(separatedCompounds) as (string | string[])[]
-  const cleanedRoot = cleanWords(rootWords) as (string | string[])[]
+  const cleanedSurface = cleanWords(surfaceForms) as string[]
+  const cleanedSeparated = cleanWords(separatedForms) as (string | string[])[]
+  const cleanedBase = cleanWords(baseForms) as (string | string[])[]
+  // console.log("Unmodified words:", cleanedUnmodified)
+  // console.log("Separated compounds:", cleanedSplit)
+  // console.log("Root words:", cleanedRoot)
+  console.log("Finished parsing input")
 
   return {
-    unmodifiedWords: cleanedUnmodified,
-    separatedCompounds: cleanedSplit,
-    rootWords: cleanedRoot,
+    surfaceForms: cleanedSurface,
+    separatedForms: cleanedSeparated,
+    baseForms: cleanedBase,
   }
 }
 

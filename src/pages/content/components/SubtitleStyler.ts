@@ -1,50 +1,105 @@
 // SubtitleStyler.ts
 import { createEffect, onCleanup } from "solid-js"
-import { processJpdb } from "../services/jpdb-service"
-import {
-  type ProcessingState,
-  createSubtitleGroups,
-  processSubtitleWindow,
-} from "../services/offscreen-subtitle-processor"
 import { createSubtitleManager } from "../services/subtitle-manager"
+import { SubtitleProcessor } from "../services/subtitle-processor"
 import "../styles/subtitle.css"
+import { IchiMoeProcessedWord } from "../types"
+import { getCardStateClass } from "../utils/card-state"
 
 export const initializeSubtitleHandler = () => {
   createEffect(() => {
     const offscreenSubtitleCollection: HTMLElement[] = []
-    let state: ProcessingState | null = null
+    let processor: SubtitleProcessor | null = null
     let hasProcessedOffscreen = false
 
     const updateSubtitle = async (element: HTMLElement) => {
-      // Skip if already processed or if next element is our processed subtitle
-      if (element.nextElementSibling?.classList.contains("cr-subtitle")) return
+      if (element.nextElementSibling?.classList.contains("cr-subtitle")) {
+        console.log("Found existing onscreen subtitle, skipping processing...")
+        return
+      }
 
       try {
         const text = element.textContent?.trim() || ""
         console.log("Detected onscreen subtitle:", text)
 
-        // Process the subtitle if we have state
-        if (state) {
-          processSubtitleWindow(text, state)
+        if (!processor) {
+          console.log("Missing processor, skipping processing...")
+          return
         }
 
-        const resultSpan = document.createElement("span")
-        resultSpan.className = "cr-subtitle"
+        const result = await processor.processSubtitleWindow(text)
+        if (result) {
+          console.log("Processed data:", result)
 
-        const processedContent = await processJpdb(text)
-        resultSpan.appendChild(processedContent)
+          const subtitleData = result.vocabulary.find(
+            (s) => s.originalText === text
+          )
+          const segmentationData = result.segmentation.find(
+            (s: IchiMoeProcessedWord) => s.originalText === text
+          )
 
-        console.log("Final DOM structure:", resultSpan.outerHTML)
+          if (subtitleData && segmentationData) {
+            const resultSpan = document.createElement("span")
+            resultSpan.className = "cr-subtitle"
 
-        // Insert the new span after the original
-        element.parentNode?.insertBefore(resultSpan, element.nextSibling)
+            let currentPosition = 0
 
-        // Hide the original span
-        element.classList.add("hidden")
-        element.removeAttribute("style")
+            // Process each word and its components
+            segmentationData.surfaceForm.forEach((surfaceWord, index) => {
+              const separatedForm = segmentationData.separatedForm[index]
+              const baseForm = segmentationData.baseForm[index]
+
+              if (Array.isArray(separatedForm)) {
+                // Handle compound word
+                separatedForm.forEach((component, componentIndex) => {
+                  const span = document.createElement("span")
+                  span.textContent = component
+
+                  const baseComponent = Array.isArray(baseForm)
+                    ? baseForm[componentIndex]
+                    : null
+                  // Match vocabulary using both spelling and word for compounds
+                  const vocabEntry = subtitleData.vocabulary.find(
+                    (v) =>
+                      (baseComponent && v.spelling === baseComponent) ||
+                      v.position === text.indexOf(component, currentPosition)
+                  )
+
+                  span.className = `jpdb-word ${getCardStateClass(vocabEntry?.cardState || null)}`
+                  resultSpan.appendChild(span)
+                  currentPosition += component.length
+                })
+              } else {
+                const span = document.createElement("span")
+                span.textContent = surfaceWord
+
+                // Find matching vocabulary entry with more flexible matching
+                const vocabEntry = subtitleData.vocabulary.find((v) => {
+                  const wordMatch =
+                    v.word === surfaceWord || v.spelling === surfaceWord
+                  const positionMatch =
+                    Math.abs(v.position - currentPosition) <= 1 // Allow small position variance
+                  return (
+                    wordMatch ||
+                    (positionMatch && v.length === surfaceWord.length)
+                  )
+                })
+
+                span.className = `jpdb-word ${getCardStateClass(vocabEntry?.cardState || null)}`
+                resultSpan.appendChild(span)
+                currentPosition += surfaceWord.length
+              }
+            })
+
+            console.log("Final DOM structure:", resultSpan.outerHTML)
+
+            element.parentNode?.insertBefore(resultSpan, element.nextSibling)
+            element.classList.add("hidden")
+            element.removeAttribute("style")
+          }
+        }
       } catch (error) {
         console.error("Error processing subtitle:", error)
-
         const errorSpan = document.createElement("span")
         errorSpan.className = "jpdb-word jpdb-unparsed"
         errorSpan.textContent = element.textContent?.trim() || ""
@@ -63,7 +118,7 @@ export const initializeSubtitleHandler = () => {
       // Only process offscreen subtitles once
       if (!hasProcessedOffscreen) {
         console.log("Processing initial offscreen subtitle collection")
-        state = createSubtitleGroups(offscreenSubtitleCollection)
+        processor = new SubtitleProcessor(offscreenSubtitleCollection)
         hasProcessedOffscreen = true
       }
     }

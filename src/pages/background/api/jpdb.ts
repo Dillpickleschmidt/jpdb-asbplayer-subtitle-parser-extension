@@ -86,11 +86,9 @@ export async function parseTextBatch(texts: string[]) {
       "spelling",
       "reading",
       "frequency_rank",
+      "meanings",
       "part_of_speech",
-      "meanings_chunks",
-      "meanings_part_of_speech",
       "card_state",
-      "pitch_accent",
     ],
   })
 }
