@@ -56,22 +56,17 @@ export class SubtitleProcessor {
   }
 
   async processSubtitleWindow(
-    text: string
+    text: string,
+    onGroupProcessed?: (result: BatchProcessingResult) => void
   ): Promise<BatchProcessingResult | null> {
-    // Check if this subtitle has already been processed
     if (this.processedResults.has(text)) {
-      console.log("Skipping already processed subtitle:", text)
       return this.processedResults.get(text) || null
     }
 
     const groupIndex = this.groups.findIndex((group) => group.includes(text))
-    if (groupIndex === -1) {
-      console.log("Current subtitle not found in any group:", text)
-      return null
-    }
+    if (groupIndex === -1) return null
 
-    console.log(`Found subtitle in group ${groupIndex}`)
-    const result = await this.processGroupWindow(groupIndex)
+    const result = await this.processGroupWindow(groupIndex, onGroupProcessed)
     if (result) {
       this.processedResults.set(text, result)
     }
@@ -113,7 +108,8 @@ export class SubtitleProcessor {
   }
 
   private async processGroupWindow(
-    groupIndex: number
+    groupIndex: number,
+    onGroupProcessed?: (result: BatchProcessingResult) => void
   ): Promise<BatchProcessingResult> {
     const processingSequence = this.generateProcessingSequence(
       groupIndex,
@@ -121,17 +117,29 @@ export class SubtitleProcessor {
       WINDOW_SIZE
     )
 
-    console.log(`Processing groups in sequence:`, processingSequence)
+    console.log(`Processing sequence: ${processingSequence.join(", ")}`)
 
-    const results = await Promise.all(
-      processingSequence.map((index) => this.processGroup(index))
-    )
+    let allSegmentation: ProcessedSubtitle[] = []
+    let allVocabulary: ProcessedSubtitle[] = []
+
+    // Process groups sequentially
+    for (const index of processingSequence) {
+      const result = await this.processGroup(index)
+      allSegmentation.push(...result.segmentation)
+      allVocabulary.push(...result.vocabulary)
+
+      // Notify after each group is processed
+      if (onGroupProcessed) {
+        onGroupProcessed({
+          segmentation: result.segmentation.map((s) => s.morphemes),
+          vocabulary: result.vocabulary,
+        })
+      }
+    }
 
     return {
-      segmentation: results
-        .flatMap((r) => r.segmentation)
-        .map((s) => s.morphemes),
-      vocabulary: results.flatMap((r) => r.vocabulary),
+      segmentation: allSegmentation.map((s) => s.morphemes),
+      vocabulary: allVocabulary,
     }
   }
 
@@ -140,14 +148,13 @@ export class SubtitleProcessor {
     vocabulary: ProcessedSubtitle[]
   }> {
     if (this.processedGroups.has(index)) {
-      console.log(`Skipping already processed group ${index}`)
       return this.processedGroups.get(index)
     }
 
     try {
       const group = this.groups[index]
-      const text = group.join(" ")
-      console.log(`Processing group ${index} (${text.length} chars)`)
+      const text = this.groups[index].join(" ")
+      console.log(`Processing group ${index}: ${text.length} chars`)
 
       // Process with IchiMoe
       const morphemes = await this.fetchMorphemes(text)
@@ -159,7 +166,7 @@ export class SubtitleProcessor {
       this.processedGroups.set(index, { segmentation, vocabulary })
       return { segmentation, vocabulary }
     } catch (error) {
-      console.error(`Error processing group ${index}:`, error)
+      console.error(`Error in group ${index}:`, error)
       return { segmentation: [], vocabulary: [] }
     }
   }
@@ -232,12 +239,15 @@ export class SubtitleProcessor {
   private async processVocabulary(
     segmentation: ProcessedSubtitle[]
   ): Promise<ProcessedSubtitle[]> {
-    const texts = segmentation.map((s) =>
-      s.morphemes.baseForm
+    const texts = segmentation.map((s) => {
+      const words = s.morphemes.baseForm
         .filter((word): word is string | string[] => word !== null)
-        .map((word) => (Array.isArray(word) ? word[0] : word))
+        .flatMap((word) => (Array.isArray(word) ? word : [word]))
         .join(" ")
-    )
+
+      // console.log(`JPDB text: ${words}`)
+      return words
+    })
 
     const response = await chrome.runtime.sendMessage({
       type: "JPDB_parseTextBatch",

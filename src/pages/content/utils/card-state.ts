@@ -1,7 +1,7 @@
 // services/card-state.ts
 export const getCardStateClass = (cardState: string | null): string => {
-  if (!cardState) {
-    return "jpdb-word jpdb-unparsed"
+  if (cardState === null) {
+    return "jpdb-word jpdb-not-in-deck"
   }
   return `jpdb-word jpdb-${cardState}`
 }

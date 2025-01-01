@@ -140,7 +140,7 @@ export const createOffscreenSubtitleObserver = (
                 "body > div.asbplayer-offscreen > div > span:not(.cr-subtitle)"
               )
               .forEach((el) => {
-                console.log("Offscreen subtitle:", el.textContent)
+                // console.log("Offscreen subtitle:", el.textContent)
                 updateCallback(el as HTMLElement)
                 complete = false
               })
