@@ -23,7 +23,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     if (typeof apiFunction === "function") {
       console.log(`Routing to JPDB API function: ${functionName}`)
-      apiFunction(...(request.args || []))
+      apiFunction(request.args || [])
         .then((result) => sendResponse({ success: true, data: result }))
         .catch((error) => {
           console.error(`JPDB API error in ${functionName}:`, error)

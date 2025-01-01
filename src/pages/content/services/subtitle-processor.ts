@@ -251,7 +251,7 @@ export class SubtitleProcessor {
 
     const response = await chrome.runtime.sendMessage({
       type: "JPDB_parseTextBatch",
-      args: [texts],
+      args: texts,
     })
 
     if (!response.success) throw new Error(response.error)
