@@ -50,6 +50,46 @@
   color: #ffffff;
 }
 
+/* Underline styles for JPDB transcript segmentation */
+.jpdb-segment {
+  position: relative;
+  border-radius: 0.25em;
+  padding-left: 2px;
+  padding-right: 2px;
+  padding-top: 0;
+  padding-bottom: 0;
+  display: inline;
+  white-space: pre-wrap;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* Create separate hover backgrounds for each line */
+.jpdb-segment {
+  position: relative;
+  z-index: 1;
+}
+
+.jpdb-segment::before {
+  content: "";
+  position: absolute;
+  top: 0px;
+  bottom: -4px;
+  left: -8px;
+  right: -8px;
+  border-radius: 0.125em;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  background-color: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(5px);
+  z-index: -1;
+  pointer-events: none;
+}
+
+.jpdb-segment:hover::before {
+  opacity: 1;
+}
+
 .cr-subtitle {
   font-family: "Noto Sans JP", sans-serif;
   font-size: 48px;
@@ -106,8 +146,6 @@
     -1.6125px 3.375px 0.5px #000,
     2.9625px 2.2875px 0.5px #000,
     /* Semi-transparent drop shadow */ 5px 5px 2px rgba(0, 0, 0, 0.8);
-  letter-spacing: 0.05em;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-  margin: 0.3em 0;
 }

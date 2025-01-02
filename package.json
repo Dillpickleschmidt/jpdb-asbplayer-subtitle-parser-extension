@@ -2,7 +2,7 @@
   "name": "jpdb-subtitle-parser",
   "displayName": "JPDB Subtitle Parser",
   "version": "1.0.0",
-  "description": "Reads subtitles from ASB-Player and connects your JPDB knowledge.",
+  "description": "ASB-Player sentence mining with JPDB",
   "license": "MIT",
   "repository": {
     "type": "git",

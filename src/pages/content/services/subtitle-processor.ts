@@ -1,9 +1,11 @@
 // subtitle-processor.ts
 import {
   BatchProcessingResult,
-  IchiMoeParseResult,
-  JpdbVocabulary,
+  ChromeMessage,
+  JpdbBatchProcessingResult,
   ProcessedSubtitle,
+  SegmentedWords,
+  VocabularyEntry,
 } from "../types"
 import { parseIchiMoe } from "./ichi-moe-parser"
 
@@ -171,7 +173,7 @@ export class SubtitleProcessor {
     }
   }
 
-  private async fetchMorphemes(text: string): Promise<IchiMoeParseResult> {
+  private async fetchMorphemes(text: string): Promise<SegmentedWords> {
     const response = await chrome.runtime.sendMessage({
       type: "FETCH_ICHI_MOE",
       url: `https://ichi.moe/cl/qr/?q=${encodeURIComponent(text)}`,
@@ -183,18 +185,18 @@ export class SubtitleProcessor {
 
   private reconstructMorphemes(
     group: string[],
-    morphemes: IchiMoeParseResult
+    parsedResult: SegmentedWords
   ): ProcessedSubtitle[] {
-    // Sort words by length for better matching
-    const sortedWords = morphemes.surfaceForms
+    const sortedWords = parsedResult.surfaceForms
       .map((word, idx) => ({ word, idx }))
       .sort((a, b) => b.word.length - a.word.length)
 
     return group.map((subtitle) => {
-      const result = {
-        surfaceForm: [] as string[],
-        separatedForm: [] as (string | string[])[],
-        baseForm: [] as (string | string[] | null)[],
+      const morphemes: SegmentedWords = {
+        originalText: subtitle,
+        surfaceForms: [],
+        separatedForms: [],
+        baseForms: [],
       }
 
       let remaining = subtitle
@@ -204,9 +206,9 @@ export class SubtitleProcessor {
         // Try to match the longest word first
         for (const { word, idx } of sortedWords) {
           if (remaining.startsWith(word)) {
-            result.surfaceForm.push(word)
-            result.separatedForm.push(morphemes.separatedForms[idx])
-            result.baseForm.push(morphemes.baseForms[idx])
+            morphemes.surfaceForms.push(word)
+            morphemes.separatedForms.push(parsedResult.separatedForms[idx])
+            morphemes.baseForms.push(parsedResult.baseForms[idx])
             remaining = remaining.slice(word.length)
             matched = true
             break
@@ -216,21 +218,16 @@ export class SubtitleProcessor {
         // If no match, take one character
         if (!matched) {
           const char = remaining[0]
-          result.surfaceForm.push(char)
-          result.separatedForm.push(char)
-          result.baseForm.push(null)
+          morphemes.surfaceForms.push(char)
+          morphemes.separatedForms.push(char)
+          morphemes.baseForms.push(null)
           remaining = remaining.slice(1)
         }
       }
 
       return {
         originalText: subtitle,
-        morphemes: {
-          originalText: subtitle,
-          surfaceForm: result.surfaceForm,
-          separatedForm: result.separatedForm,
-          baseForm: result.baseForm,
-        },
+        morphemes,
         vocabulary: [],
       }
     })
@@ -240,22 +237,23 @@ export class SubtitleProcessor {
     segmentation: ProcessedSubtitle[]
   ): Promise<ProcessedSubtitle[]> {
     const texts = segmentation.map((s) => {
-      const words = s.morphemes.baseForm
+      const words = s.morphemes.baseForms
         .filter((word): word is string | string[] => word !== null)
         .flatMap((word) => (Array.isArray(word) ? word : [word]))
         .join(" ")
 
-      // console.log(`JPDB text: ${words}`)
+      // console.log(`Words: ${words}`)
       return words
     })
 
-    const response = await chrome.runtime.sendMessage({
+    console.log("Sending batch processing request:", texts)
+    const response = (await chrome.runtime.sendMessage({
       type: "JPDB_parseTextBatch",
       args: texts,
-    })
+    })) as ChromeMessage<JpdbBatchProcessingResult>
 
     if (!response.success) throw new Error(response.error)
-    return this.mapVocabularyToSubtitles(segmentation, response.data)
+    return this.mapVocabularyToSubtitles(segmentation, response.data!)
   }
 
   private mapVocabularyToSubtitles(
@@ -274,9 +272,9 @@ export class SubtitleProcessor {
 
   private processJpdbTokens(
     text: string,
-    tokens: any[],
+    tokens: [number, number, number][],
     vocabulary: any[]
-  ): JpdbVocabulary[] {
+  ): VocabularyEntry[] {
     return [...tokens]
       .sort((a, b) => a[1] - b[1])
       .map(([vocabIndex, position, length]) => {
@@ -292,9 +290,9 @@ export class SubtitleProcessor {
           rid,
           spelling,
           reading,
-          frequency: freq,
+          frequencyRank: freq,
           meanings: Array.isArray(meanings) ? meanings : [meanings],
-          pos: Array.isArray(pos) ? pos : [pos],
+          partOfSpeech: Array.isArray(pos) ? pos : [pos],
           cardState: state,
           position,
           length,

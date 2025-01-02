@@ -1,5 +1,5 @@
 // ichi-moe-parser.ts
-import { IchiMoeParseResult } from "../types"
+import { SegmentedWords } from "../types"
 
 // List of words that should not have compounds separated
 const DONT_SEPARATE_WORDS = new Set([
@@ -20,13 +20,13 @@ const cleanWords = (
   return words.map((w) => (Array.isArray(w) ? w.map(cleanWord) : cleanWord(w)))
 }
 
-export const parseIchiMoe = (htmlContent: string): IchiMoeParseResult => {
+export const parseIchiMoe = (htmlContent: string): SegmentedWords => {
   const parser = new DOMParser()
   const doc = parser.parseFromString(htmlContent, "text/html")
 
   const surfaceForms: string[] = []
   const separatedForms: (string | string[])[] = []
-  const baseForms: (string | string[])[] = []
+  const baseForms: (string | string[] | null)[] = []
 
   // Find all gloss divs
   const glossDivs = doc.querySelectorAll("div.gloss")
@@ -108,13 +108,10 @@ export const parseIchiMoe = (htmlContent: string): IchiMoeParseResult => {
   // Properly type the cleaned results
   const cleanedSurface = cleanWords(surfaceForms) as string[]
   const cleanedSeparated = cleanWords(separatedForms) as (string | string[])[]
-  const cleanedBase = cleanWords(baseForms) as (string | string[])[]
-  // console.log("Unmodified words:", cleanedUnmodified)
-  // console.log("Separated compounds:", cleanedSplit)
-  // console.log("Root words:", cleanedRoot)
-  console.log("Finished parsing input")
+  const cleanedBase = cleanWords(baseForms) as (string | string[] | null)[]
 
   return {
+    originalText: doc.body.textContent?.trim() ?? "",
     surfaceForms: cleanedSurface,
     separatedForms: cleanedSeparated,
     baseForms: cleanedBase,
