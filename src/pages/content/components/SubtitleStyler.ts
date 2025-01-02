@@ -229,6 +229,9 @@ async function processSubtitle(
   try {
     let hasProcessed = false
 
+    // Get JPDB data first since it might be cached from initial processing
+    const jpdbData = await jpdbProcessor.getSegmentationForText(text)
+
     const onGroupProcessed = async (result: BatchProcessingResult) => {
       if (hasProcessed) return
 
@@ -238,13 +241,11 @@ async function processSubtitle(
       const segmentationData = result.segmentation.find(
         (s: SegmentedWords) => s.originalText === text
       )
-      const jpdbData = await jpdbProcessor.getSegmentationForText(text)
 
+      // Use the JPDB data we already got
       if (!subtitleData || !segmentationData || !jpdbData) return
 
       hasProcessed = true
-      console.log("Processing text:", text)
-      console.log("JPDB data:", jpdbData)
 
       const resultSpan = existingProcessed?.classList.contains("cr-subtitle")
         ? existingProcessed
