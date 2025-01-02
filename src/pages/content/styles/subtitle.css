@@ -58,16 +58,10 @@
   padding-right: 2px;
   padding-top: 0;
   padding-bottom: 0;
-  display: inline;
+  display: inline-block;
   white-space: pre-wrap;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
-}
-
-/* Create separate hover backgrounds for each line */
-.jpdb-segment {
-  position: relative;
-  z-index: 1;
 }
 
 .jpdb-segment::before {
