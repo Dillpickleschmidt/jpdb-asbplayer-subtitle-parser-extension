@@ -23,7 +23,8 @@ interface IchiMoeWord {
   text: string
   position: number
   length: number
-  baseForm: string | null
+  baseForm: string | string[] | null
+  separatedForm: string | string[]
   vocabularyEntry: any
 }
 
@@ -37,9 +38,9 @@ function createWordSpan(
 
   if (baseForm) {
     const vocabEntry = vocabulary.find((v) => v.spelling === baseForm)
-    span.className = getCardStateClass(vocabEntry?.cardState || null)
+    span.className = `jpdb-word ${getCardStateClass(vocabEntry?.cardState || null)}`
   } else {
-    span.className = "jpdb-unparsed"
+    span.className = "jpdb-word jpdb-unparsed"
   }
 
   return span
@@ -66,23 +67,71 @@ function createIchiMoeWords(
   const words: IchiMoeWord[] = []
 
   segmentationData.surfaceForms.forEach((surfaceWord, index) => {
-    const baseForm = Array.isArray(segmentationData.baseForms[index])
-      ? segmentationData.baseForms[index][0]
-      : segmentationData.baseForms[index]
-
     words.push({
       text: surfaceWord,
       position,
       length: surfaceWord.length,
-      baseForm,
-      vocabularyEntry: baseForm
-        ? subtitleData.vocabulary.find((v) => v.spelling === baseForm)
-        : null,
+      baseForm: segmentationData.baseForms[index],
+      separatedForm: segmentationData.separatedForms[index],
+      vocabularyEntry: null,
     })
     position += surfaceWord.length
   })
 
   return words
+}
+
+function createSpansForWord(
+  word: IchiMoeWord,
+  segmentStart: number,
+  segmentEnd: number,
+  subtitleData: ProcessedSubtitle,
+  text: string
+): HTMLSpanElement[] {
+  const spans: HTMLSpanElement[] = []
+
+  if (Array.isArray(word.separatedForm)) {
+    // Handle compound word
+    let currentPos = word.position
+    word.separatedForm.forEach((component, componentIndex) => {
+      const componentStart = currentPos
+      const componentEnd = currentPos + component.length
+
+      // Only create span if the component overlaps with the current segment
+      if (componentStart < segmentEnd && componentEnd > segmentStart) {
+        const spanStart = Math.max(componentStart, segmentStart)
+        const spanEnd = Math.min(componentEnd, segmentEnd)
+        const componentText = text.slice(spanStart, spanEnd)
+
+        const baseForm = Array.isArray(word.baseForm)
+          ? word.baseForm[componentIndex]
+          : null
+
+        const span = createWordSpan(
+          componentText,
+          baseForm,
+          subtitleData.vocabulary
+        )
+        spans.push(span)
+      }
+      currentPos += component.length
+    })
+  } else {
+    // Handle single word
+    const wordText = text.slice(
+      Math.max(word.position, segmentStart),
+      Math.min(word.position + word.length, segmentEnd)
+    )
+    spans.push(
+      createWordSpan(
+        wordText,
+        word.baseForm as string | null,
+        subtitleData.vocabulary
+      )
+    )
+  }
+
+  return spans
 }
 
 function createSpansForSegment(
@@ -91,75 +140,34 @@ function createSpansForSegment(
   ichiMoeWords: IchiMoeWord[],
   subtitleData: ProcessedSubtitle
 ): HTMLSpanElement {
-  console.log("JPDB Vocabulary:", subtitleData.vocabulary)
-  console.log("Processed Words:", ichiMoeWords)
-
   const segmentSpan = document.createElement("span")
   segmentSpan.className = "jpdb-segment"
 
-  // Find all ichi.moe words that overlap with this JPDB segment
   const overlappingWords = ichiMoeWords.filter((word) => {
     const wordEnd = word.position + word.length
     return word.position < jpdbSegment.end && wordEnd > jpdbSegment.position
   })
 
-  let currentPos = jpdbSegment.position
-
-  overlappingWords.forEach((word) => {
-    const wordEnd = word.position + word.length
-
-    // Process each separatedForm for the current word
-    const separatedForms = Array.isArray(word.baseForm)
-      ? word.baseForm
-      : [word.baseForm]
-
-    let localPosition = word.position
-
-    separatedForms.forEach((form) => {
-      if (!form) return
-
-      const formEnd = localPosition + form.length
-
-      // Ensure the form is within the segment bounds
-      const startPos = Math.max(localPosition, jpdbSegment.position)
-      const endPos = Math.min(formEnd, jpdbSegment.end)
-
-      if (startPos < endPos) {
-        const formPart = text.slice(startPos, endPos)
-
-        // Find the specific vocabulary entry for this form
-        const vocabEntry = subtitleData.vocabulary.find(
-          (v) => v.spelling === form
-        )
-
-        // Assign the correct class based on the vocabulary entry
-        const colorSpan = createWordSpan(
-          formPart,
-          form,
-          subtitleData.vocabulary
-        )
-        colorSpan.className = vocabEntry
-          ? getCardStateClass(vocabEntry.cardState)
-          : "jpdb-unparsed"
-
-        segmentSpan.appendChild(colorSpan)
-        currentPos = endPos
-      }
-
-      localPosition += form.length
-    })
-  })
-
-  // Handle any remaining text within the segment that isn't part of overlapping words
-  if (currentPos < jpdbSegment.end) {
-    const remainingText = text.slice(currentPos, jpdbSegment.end)
+  if (overlappingWords.length === 0) {
     const unparsedSpan = createWordSpan(
-      remainingText,
+      jpdbSegment.text,
       null,
       subtitleData.vocabulary
     )
     segmentSpan.appendChild(unparsedSpan)
+    return segmentSpan
   }
+
+  overlappingWords.forEach((word) => {
+    const spans = createSpansForWord(
+      word,
+      jpdbSegment.position,
+      jpdbSegment.end,
+      subtitleData,
+      text
+    )
+    spans.forEach((span) => segmentSpan.appendChild(span))
+  })
 
   return segmentSpan
 }
@@ -235,6 +243,8 @@ async function processSubtitle(
       if (!subtitleData || !segmentationData || !jpdbData) return
 
       hasProcessed = true
+      console.log("Processing text:", text)
+      console.log("JPDB data:", jpdbData)
 
       const resultSpan = existingProcessed?.classList.contains("cr-subtitle")
         ? existingProcessed
