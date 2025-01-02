@@ -246,7 +246,7 @@ export class SubtitleProcessor {
       return words
     })
 
-    console.log("Sending batch processing request:", texts)
+    // console.log("Sending batch processing request:", texts)
     const response = (await chrome.runtime.sendMessage({
       type: "JPDB_parseTextBatch",
       args: texts,

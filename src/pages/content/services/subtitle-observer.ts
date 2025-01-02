@@ -1,8 +1,12 @@
 // subtitle-observer.ts
 import { createFrameInfoListener } from "./frame-handlers"
 
-// Observes DOM mutations to catch and style subtitle elements, handling both
-// regular DOM and shadow DOM contexts
+// Selector for both normal and fullscreen subtitles
+const SUBTITLE_SELECTOR = `
+  .asbplayer-subtitles-container-bottom .asbplayer-subtitles span,
+  .asbplayer-fullscreen-subtitles span
+`.trim()
+
 export const createSubtitleObserver = (
   updateCallback: (element: HTMLElement) => void,
   frameInfoListener?: ReturnType<typeof createFrameInfoListener>
@@ -21,9 +25,7 @@ export const createSubtitleObserver = (
 
           // Original subtitle node check
           if (
-            node.matches(
-              ".asbplayer-subtitles-container-bottom .asbplayer-subtitles span"
-            ) &&
+            node.matches(SUBTITLE_SELECTOR) &&
             !node.classList.contains("cr-subtitle")
           ) {
             updateCallback(node)
@@ -31,9 +33,7 @@ export const createSubtitleObserver = (
 
           // Check child nodes, excluding our count spans
           node
-            .querySelectorAll(
-              ".asbplayer-subtitles-container-bottom .asbplayer-subtitles span:not(.cr-subtitle)"
-            )
+            .querySelectorAll(`${SUBTITLE_SELECTOR}:not(.cr-subtitle)`)
             .forEach((el) => updateCallback(el as HTMLElement))
         }
       })
@@ -45,9 +45,7 @@ export const createSubtitleObserver = (
       const target = mutation.target
       if (target instanceof Element && target.shadowRoot) {
         target.shadowRoot
-          .querySelectorAll(
-            ".asbplayer-subtitles-container-bottom .asbplayer-subtitles span:not(.cr-subtitle)"
-          )
+          .querySelectorAll(`${SUBTITLE_SELECTOR}:not(.cr-subtitle)`)
           .forEach((el) => updateCallback(el as HTMLElement))
       }
     })
@@ -56,17 +54,13 @@ export const createSubtitleObserver = (
   // Initial sweep to catch any existing subtitles before observers are attached
   function checkExistingSubtitles() {
     document
-      .querySelectorAll(
-        ".asbplayer-subtitles-container-bottom .asbplayer-subtitles span"
-      )
+      .querySelectorAll(SUBTITLE_SELECTOR)
       .forEach((el) => updateCallback(el as HTMLElement))
 
     document.querySelectorAll("*").forEach((host) => {
       if (host.shadowRoot) {
         host.shadowRoot
-          .querySelectorAll(
-            ".asbplayer-subtitles-container-bottom .asbplayer-subtitles span"
-          )
+          .querySelectorAll(SUBTITLE_SELECTOR)
           .forEach((el) => updateCallback(el as HTMLElement))
       }
     })
@@ -79,9 +73,7 @@ export const createSubtitleObserver = (
             iframe.contentDocument || iframe.contentWindow?.document
           if (iframeDoc) {
             iframeDoc
-              .querySelectorAll(
-                ".asbplayer-subtitles-container-bottom .asbplayer-subtitles span"
-              )
+              .querySelectorAll(SUBTITLE_SELECTOR)
               .forEach((el) => updateCallback(el as HTMLElement))
           }
         } catch (e) {
@@ -124,7 +116,7 @@ export const createSubtitleObserver = (
 // Separate observer for offscreen subtitles
 export const createOffscreenSubtitleObserver = (
   updateCallback: (element: HTMLElement) => void,
-  onComplete: () => void // Callback to signal all spans have been collected
+  onComplete: () => void
 ) => {
   let complete = true
   const offscreenObserver = new MutationObserver((mutations) => {

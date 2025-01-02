@@ -97,7 +97,7 @@ export class JpdbSubtitleProcessor {
   private async sendToJpdbApi(
     group: string[]
   ): Promise<JpdbBatchProcessingResult> {
-    console.log(`Sending group to JPDB API:`, group) // Debug log
+    // console.log(`Sending group to JPDB API:`, group) // Debug log
     const response = await chrome.runtime.sendMessage({
       type: "JPDB_parseTextBatch",
       args: group,
