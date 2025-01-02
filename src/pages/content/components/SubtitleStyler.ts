@@ -87,8 +87,8 @@ function createSubtitleHandlers(state: {
   return { updateSubtitle, updateOffscreenSubtitle, onObservationComplete }
 }
 
-// Map to track processed subtitles
-const processedSubtitles = new Map<string, boolean>()
+// Set to track processed elements by their ID
+const processedElements = new Set<string>()
 
 // 3. Main Subtitle Processing
 async function processSubtitle(
@@ -96,14 +96,19 @@ async function processSubtitle(
   processor: SubtitleProcessor,
   jpdbProcessor: JpdbSubtitleProcessor
 ): Promise<void> {
-  const text = element.textContent?.trim() || ""
-  const existingProcessed = element.nextElementSibling as HTMLElement
+  // Ensure element has an ID
+  if (!element.id) {
+    element.id = `subtitle-${Math.random().toString(36).substring(2)}`
+  }
 
-  // Skip if already processed
-  if (processedSubtitles.get(text)) {
-    console.log("Skipping already processed subtitle:", text)
+  // Skip if this specific element was already processed
+  if (processedElements.has(element.id)) {
+    console.log("Skipping already processed element:", element.id)
     return
   }
+
+  const text = element.textContent?.trim() || ""
+  const existingProcessed = element.nextElementSibling as HTMLElement
 
   try {
     // Step 1: Get JPDB data (might be cached)
@@ -111,21 +116,13 @@ async function processSubtitle(
 
     // Step 2: Process subtitle window with callback
     const onGroupProcessed = async (result: BatchProcessingResult) => {
-      // Skip if already processed (double-check in case of race conditions)
-      if (processedSubtitles.get(text)) {
-        console.log("Skipping already processed subtitle:", text)
+      // Double check if processed (for race conditions)
+      if (processedElements.has(element.id)) {
+        console.log("Skipping already processed element:", element.id)
         return
       }
 
-      console.log("Processing group for text:", text)
-      console.log(
-        "Result vocabulary:",
-        result.vocabulary.map((v) => v.originalText)
-      )
-      console.log(
-        "Result segmentation:",
-        result.segmentation.map((s) => s.originalText)
-      )
+      console.log("Processing element:", element.id, "with text:", text)
 
       const subtitleData = result.vocabulary.find(
         (s) => s.originalText === text
@@ -134,13 +131,10 @@ async function processSubtitle(
         (s: SegmentedWords) => s.originalText === text
       )
 
-      console.log("Found subtitle data:", !!subtitleData)
-      console.log("Found segmentation data:", !!segmentationData)
-
       if (!subtitleData || !segmentationData || !jpdbData) return
 
-      // Mark as processed before creating DOM elements
-      processedSubtitles.set(text, true)
+      // Mark this specific element as processed
+      processedElements.add(element.id)
 
       // Step 3: Create DOM elements
       const resultSpan = getOrCreateResultSpan(element, existingProcessed)

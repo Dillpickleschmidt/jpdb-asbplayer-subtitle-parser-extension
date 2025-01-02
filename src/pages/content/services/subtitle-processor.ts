@@ -20,7 +20,6 @@ export class SubtitleProcessor {
     { segmentation: ProcessedSubtitle[]; vocabulary: ProcessedSubtitle[] }
   >
   private processedResults: Map<string, BatchProcessingResult>
-  private lastProcessedText: string
 
   constructor(elements: HTMLElement[]) {
     this.subtitles = elements
@@ -30,7 +29,6 @@ export class SubtitleProcessor {
     this.groups = this.createGroups()
     this.processedGroups = new Map()
     this.processedResults = new Map()
-    this.lastProcessedText = ""
 
     console.log(
       `Initialized processor with ${this.subtitles.length} subtitles in ${this.groups.length} groups`
@@ -61,20 +59,39 @@ export class SubtitleProcessor {
     text: string,
     onGroupProcessed?: (result: BatchProcessingResult) => void
   ): Promise<BatchProcessingResult | null> {
+    console.log("Processing window for text:", text)
+
+    // First try exact match in cached results
     if (this.processedResults.has(text)) {
-      return this.processedResults.get(text) || null
+      console.log("Using cached result for:", text)
+      const result = this.processedResults.get(text)
+      if (onGroupProcessed && result) {
+        onGroupProcessed(result)
+      }
+      return result || null
     }
 
-    const groupIndex = this.groups.findIndex((group) => group.includes(text))
-    if (groupIndex === -1) return null
+    // Find any group that contains this text within it
+    for (let groupIndex = 0; groupIndex < this.groups.length; groupIndex++) {
+      const group = this.groups[groupIndex]
+      const groupText = group.join(" ")
 
-    const result = await this.processGroupWindow(groupIndex, onGroupProcessed)
-    if (result) {
-      this.processedResults.set(text, result)
+      if (groupText.includes(text)) {
+        console.log("Found text in group:", groupIndex)
+        const result = await this.processGroupWindow(
+          groupIndex,
+          onGroupProcessed
+        )
+
+        // Cache the result
+        this.processedResults.set(text, result)
+
+        return result
+      }
     }
 
-    this.lastProcessedText = text
-    return result
+    console.log("Text not found in any group:", text)
+    return null
   }
 
   /** Generates a sequence of group indices that expands outward from the current group,
@@ -87,7 +104,6 @@ export class SubtitleProcessor {
     const sequence: number[] = [groupIndex] // Always start with current group
     let forward = groupIndex + 1
     let backward = groupIndex - 1
-    let count = 1
 
     while (sequence.length < windowSize) {
       // Add two forward steps
