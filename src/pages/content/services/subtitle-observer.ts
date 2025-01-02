@@ -1,7 +1,6 @@
 // subtitle-observer.ts
 import { createFrameInfoListener } from "./frame-handlers"
 
-// Selector for both normal and fullscreen subtitles
 const SUBTITLE_SELECTOR = `
   .asbplayer-subtitles-container-bottom .asbplayer-subtitles span,
   .asbplayer-fullscreen-subtitles span
@@ -14,27 +13,52 @@ export const createSubtitleObserver = (
   const mainObserver = new MutationObserver(handleMainDocumentMutations)
   const shadowObserver = new MutationObserver(handleShadowDomMutations)
 
+  // Cache to prevent duplicate processing
+  const processedTexts = new Map<string, number>()
+  const CACHE_TIMEOUT = 1000 // 1 second
+
+  function isRecentlyProcessed(text: string): boolean {
+    const lastProcessed = processedTexts.get(text)
+    if (!lastProcessed) return false
+
+    const now = Date.now()
+    if (now - lastProcessed > CACHE_TIMEOUT) {
+      processedTexts.delete(text)
+      return false
+    }
+    return true
+  }
+
+  function markProcessed(text: string) {
+    processedTexts.set(text, Date.now())
+  }
+
+  function safeUpdateCallback(element: HTMLElement) {
+    const text = element.textContent || ""
+    if (!isRecentlyProcessed(text)) {
+      markProcessed(text)
+      updateCallback(element)
+    }
+  }
+
   function handleMainDocumentMutations(mutations: MutationRecord[]) {
     mutations.forEach((mutation) => {
       mutation.addedNodes.forEach((node) => {
         if (node instanceof HTMLElement) {
-          // Skip if this is one of our character count spans
           if (node.classList.contains("cr-subtitle")) {
             return
           }
 
-          // Original subtitle node check
           if (
             node.matches(SUBTITLE_SELECTOR) &&
             !node.classList.contains("cr-subtitle")
           ) {
-            updateCallback(node)
+            safeUpdateCallback(node)
           }
 
-          // Check child nodes, excluding our count spans
           node
             .querySelectorAll(`${SUBTITLE_SELECTOR}:not(.cr-subtitle)`)
-            .forEach((el) => updateCallback(el as HTMLElement))
+            .forEach((el) => safeUpdateCallback(el as HTMLElement))
         }
       })
     })
@@ -46,26 +70,24 @@ export const createSubtitleObserver = (
       if (target instanceof Element && target.shadowRoot) {
         target.shadowRoot
           .querySelectorAll(`${SUBTITLE_SELECTOR}:not(.cr-subtitle)`)
-          .forEach((el) => updateCallback(el as HTMLElement))
+          .forEach((el) => safeUpdateCallback(el as HTMLElement))
       }
     })
   }
 
-  // Initial sweep to catch any existing subtitles before observers are attached
   function checkExistingSubtitles() {
     document
       .querySelectorAll(SUBTITLE_SELECTOR)
-      .forEach((el) => updateCallback(el as HTMLElement))
+      .forEach((el) => safeUpdateCallback(el as HTMLElement))
 
     document.querySelectorAll("*").forEach((host) => {
       if (host.shadowRoot) {
         host.shadowRoot
           .querySelectorAll(SUBTITLE_SELECTOR)
-          .forEach((el) => updateCallback(el as HTMLElement))
+          .forEach((el) => safeUpdateCallback(el as HTMLElement))
       }
     })
 
-    // Check iframes, handling potential cross-origin restrictions
     if (frameInfoListener) {
       Object.values(frameInfoListener.iframesById).forEach((iframe) => {
         try {
@@ -74,7 +96,7 @@ export const createSubtitleObserver = (
           if (iframeDoc) {
             iframeDoc
               .querySelectorAll(SUBTITLE_SELECTOR)
-              .forEach((el) => updateCallback(el as HTMLElement))
+              .forEach((el) => safeUpdateCallback(el as HTMLElement))
           }
         } catch (e) {
           // Silently handle cross-origin iframe access restrictions
@@ -108,6 +130,7 @@ export const createSubtitleObserver = (
   const unbind = () => {
     mainObserver.disconnect()
     shadowObserver.disconnect()
+    processedTexts.clear()
   }
 
   return { bind, unbind }
@@ -132,7 +155,6 @@ export const createOffscreenSubtitleObserver = (
                 "body > div.asbplayer-offscreen > div > span:not(.cr-subtitle)"
               )
               .forEach((el) => {
-                // console.log("Offscreen subtitle:", el.textContent)
                 updateCallback(el as HTMLElement)
                 complete = false
               })
