@@ -5,7 +5,7 @@ export interface SegmentedWords {
   surfaceForms: string[] // Detected surface forms
   separatedForms: (string | string[])[] // Separated components
   baseForms: (string | string[] | null)[] // Base or dictionary forms
-  cardStates: Array<string | null> // The card state of the base forms
+  cardStates: Array<string | string[] | null> // The card state of the base forms
 }
 
 export interface VocabularyEntry {
@@ -35,7 +35,7 @@ export interface ProcessedSubtitle {
   vocabulary: VocabularyEntry[]
 }
 
-export interface baseFormStates {
+export interface alignedBaseFormState {
   baseWord: string
   jpdbBaseWord: string
   state: string[]

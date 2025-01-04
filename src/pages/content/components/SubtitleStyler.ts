@@ -4,18 +4,17 @@ import { JpdbProcessor } from "../services/jpdb-processor"
 import { createSubtitleManager } from "../services/subtitle-manager"
 import "../styles/subtitle.css"
 import {
+  alignedBaseFormState,
   JpdbBatchProcessingResult,
-  JpdbToken,
   ProcessedSubtitle,
   SegmentedWords,
-  VocabularyEntry,
 } from "../types"
 
 // Configuration
 const MAX_GROUPS_TO_PROCESS = 6
 const BUFFER_SIZE = {
-  FORWARD: 2,
-  BACKWARD: 1,
+  FORWARD: 0,
+  BACKWARD: 0,
 }
 
 // State Management
@@ -59,6 +58,11 @@ async function processOffscreenSubtitles(element?: HTMLElement): Promise<void> {
       return
     }
 
+    console.log("Fetching vocabulary batch for all grouped subtitles...")
+    const allVocabularyResults = await JpdbProcessor.fetchVocabularyBatch(
+      groupedSubtitles.flat()
+    )
+
     const processingSequence = generateProcessingSequence(
       onscreenGroupIndex,
       groupedSubtitles.length
@@ -72,7 +76,12 @@ async function processOffscreenSubtitles(element?: HTMLElement): Promise<void> {
         continue
       }
 
-      await processGroup(groupIndex, groupedSubtitles, element)
+      await processGroup(
+        groupIndex,
+        groupedSubtitles,
+        allVocabularyResults,
+        element
+      )
     }
 
     console.log("All groups in range processed:", processedResults)
@@ -90,26 +99,50 @@ function findOnscreenSubtitleGroup(groupedSubtitles: string[][]): number {
 async function processGroup(
   groupIndex: number,
   groupedSubtitles: string[][],
+  jpdbVocabResults: JpdbBatchProcessingResult,
   onscreenElement?: HTMLElement
-) {
+): Promise<void> {
   const groupText = groupedSubtitles[groupIndex].join(" ")
   console.log(`Processing group ${groupIndex}: ${groupText.length} chars`)
 
-  const [morphemes, jpdbResults] = await Promise.all([
-    IchiMoeProcessor.fetchMorphemes(groupText),
-    JpdbProcessor.fetchVocabularyBatch(groupedSubtitles[groupIndex]),
-  ])
+  // Fetch morphemes from ichi.moe
+  const morphemes = await IchiMoeProcessor.fetchMorphemes(groupText)
 
+  // Extract all base forms from morphemes
+  const baseFormsForCardStates = morphemes.baseForms
+    .flatMap((form) => (Array.isArray(form) ? form : [form]))
+    .join(" ")
+
+  // Fetch card states for all base forms
+  const cardStatesResult = await JpdbProcessor.fetchCardStates(
+    baseFormsForCardStates
+  )
+
+  const baseFormStates: alignedBaseFormState[] = cardStatesResult.tokens.map(
+    (token) => {
+      const vocabEntry = cardStatesResult.vocabulary[token[0]]
+      return {
+        baseWord: baseFormsForCardStates.slice(token[1], token[1] + token[2]),
+        jpdbBaseWord: vocabEntry[0] as string,
+        state: vocabEntry[1] as string[],
+      }
+    }
+  )
+
+  console.log("baseFormStates:", baseFormStates)
+
+  // Map results to individual subtitles
   const groupResults = mapResultsToSubtitles(
     groupedSubtitles[groupIndex],
     morphemes,
-    jpdbResults
+    jpdbVocabResults,
+    baseFormStates
   )
 
+  // Store results and update UI if needed
   groupedSubtitles[groupIndex].forEach((subtitle, index) => {
     processedResults.set(subtitle, groupResults[index])
 
-    // If this is the current onscreen subtitle, update it immediately
     if (subtitle === currentOnscreenSubtitle && onscreenElement) {
       console.log("Updating onscreen subtitle immediately:", subtitle)
       updateSubtitleDisplay(onscreenElement, groupResults[index])
@@ -118,87 +151,100 @@ async function processGroup(
 
   processedGroups.add(groupIndex)
   console.log(`Completed processing group ${groupIndex}`)
+  console.log("Updated processed results:", processedResults)
 }
 
 function mapResultsToSubtitles(
   subtitles: string[],
   morphemes: SegmentedWords,
-  jpdbResults: JpdbBatchProcessingResult
+  jpdbResults: JpdbBatchProcessingResult,
+  alignedBaseFormStates: alignedBaseFormState[]
 ): ProcessedSubtitle[] {
-  const sortedWords = getSortedMorphemeWords(morphemes)
+  let currentMorphemeIndex = 0
 
-  return subtitles.map((subtitle) => ({
-    originalText: subtitle,
-    morphemes: processMorphemes(subtitle, sortedWords, morphemes),
-    vocabulary: mapVocabulary(subtitle, jpdbResults),
-  }))
+  return subtitles.map((subtitle) => {
+    const processedMorphemes: SegmentedWords = {
+      originalText: subtitle,
+      surfaceForms: [],
+      separatedForms: [],
+      baseForms: [],
+      cardStates: [],
+    }
+
+    // Process the current subtitle by iterating over morphemes
+    let remainingText = subtitle
+    while (
+      remainingText.length > 0 &&
+      currentMorphemeIndex < morphemes.surfaceForms.length
+    ) {
+      const surfaceForm = morphemes.surfaceForms[currentMorphemeIndex]
+      const separatedForm = morphemes.separatedForms[currentMorphemeIndex]
+      const baseForm = morphemes.baseForms[currentMorphemeIndex]
+
+      if (remainingText.startsWith(surfaceForm)) {
+        processedMorphemes.surfaceForms.push(surfaceForm)
+        processedMorphemes.separatedForms.push(separatedForm)
+
+        if (baseForm !== null) {
+          const matchedStates = matchBaseFormWithStates(
+            baseForm,
+            alignedBaseFormStates
+          )
+          processedMorphemes.baseForms.push(matchedStates.baseWords)
+          processedMorphemes.cardStates.push(matchedStates.cardStates)
+        } else {
+          processedMorphemes.baseForms.push(null)
+          processedMorphemes.cardStates.push(null)
+        }
+
+        remainingText = remainingText.slice(surfaceForm.length)
+        currentMorphemeIndex++
+      } else {
+        // If no match, treat the next character as unparsed text
+        processedMorphemes.surfaceForms.push(remainingText[0])
+        processedMorphemes.separatedForms.push(remainingText[0])
+        processedMorphemes.baseForms.push(null)
+        processedMorphemes.cardStates.push(null)
+        remainingText = remainingText.slice(1)
+      }
+    }
+
+    return {
+      originalText: subtitle,
+      morphemes: processedMorphemes,
+      vocabulary: [], // Can be populated later if needed
+    }
+  })
 }
 
-function getSortedMorphemeWords(morphemes: SegmentedWords) {
-  return morphemes.surfaceForms
-    .map((word, idx) => ({ word, idx }))
-    .sort((a, b) => b.word.length - a.word.length)
-}
-
-function processMorphemes(
-  subtitle: string,
-  sortedWords: Array<{ word: string; idx: number }>,
-  morphemes: SegmentedWords
-): SegmentedWords {
-  const result: SegmentedWords = {
-    originalText: subtitle,
-    surfaceForms: [],
-    separatedForms: [],
-    baseForms: [],
-  }
-
-  let remaining = subtitle
-  while (remaining.length > 0) {
-    const matchedWord = sortedWords.find(({ word }) =>
-      remaining.startsWith(word)
+function matchBaseFormWithStates(
+  baseForm: string | string[],
+  alignedBaseFormStates: alignedBaseFormState[]
+): { baseWords: string | string[]; cardStates: string | string[] | null } {
+  if (Array.isArray(baseForm)) {
+    // Handle compound words
+    const matchedStates = baseForm.map((word) =>
+      alignedBaseFormStates.find((state) => state.baseWord === word)
     )
 
-    if (matchedWord) {
-      result.surfaceForms.push(matchedWord.word)
-      result.separatedForms.push(morphemes.separatedForms[matchedWord.idx])
-      result.baseForms.push(morphemes.baseForms[matchedWord.idx])
-      remaining = remaining.slice(matchedWord.word.length)
-    } else {
-      const char = remaining[0]
-      result.surfaceForms.push(char)
-      result.separatedForms.push(char)
-      result.baseForms.push(null)
-      remaining = remaining.slice(1)
+    return {
+      baseWords: matchedStates.map(
+        (state, idx) => state?.jpdbBaseWord || baseForm[idx]
+      ),
+      cardStates: matchedStates.map((state) =>
+        state?.state?.length > 0 ? state.state[0] : null
+      ),
     }
-  }
-
-  return result
-}
-
-function mapVocabulary(
-  subtitle: string,
-  jpdbResults: JpdbBatchProcessingResult
-): VocabularyEntry[] {
-  return jpdbResults.tokens.flatMap((tokens) =>
-    tokens
-      .map((token) => createVocabEntry(subtitle, token, jpdbResults))
-      .filter((entry): entry is VocabularyEntry => entry !== null)
-  )
-}
-
-function createVocabEntry(
-  subtitle: string,
-  token: JpdbToken,
-  jpdbResults: JpdbBatchProcessingResult
-): VocabularyEntry | null {
-  const vocabEntry = jpdbResults.vocabulary[token[0]]
-  if (!vocabEntry) return null
-
-  return {
-    ...vocabEntry,
-    word: subtitle.slice(token[1], token[1] + token[2]),
-    position: token[1],
-    length: token[2],
+  } else {
+    // Handle single words
+    const matchedState = alignedBaseFormStates.find(
+      (state) => state.baseWord === baseForm
+    )
+    return {
+      baseWords: matchedState?.jpdbBaseWord || baseForm,
+      cardStates:
+        matchedState?.state?.length > 0 ? matchedState.state[0] : null,
+    }
   }
 }
 
@@ -316,11 +362,30 @@ function processMorpheme(
 ): void {
   if (morpheme && separatedForm) {
     if (baseForm === null) {
+      // If there's no base form, treat it as unparsed text
       crSubtitleSpan.appendChild(createUnparsedSpan(morpheme))
     } else {
-      crSubtitleSpan.appendChild(
-        createParsedMorphemeSpan(morpheme, separatedForm)
-      )
+      // Create a parsed span for the morpheme
+      const segmentSpan = document.createElement("span")
+      segmentSpan.className = "jpdb-segment"
+
+      if (Array.isArray(separatedForm)) {
+        // Handle array of separated forms (e.g., ['されて', 'きて'])
+        separatedForm.forEach((component) => {
+          const componentSpan = document.createElement("span")
+          componentSpan.className = "jpdb-new"
+          componentSpan.textContent = component
+          segmentSpan.appendChild(componentSpan)
+        })
+      } else {
+        // Handle single separated form (e.g., 'ずっと')
+        const componentSpan = document.createElement("span")
+        componentSpan.className = "jpdb-new"
+        componentSpan.textContent = separatedForm
+        segmentSpan.appendChild(componentSpan)
+      }
+
+      crSubtitleSpan.appendChild(segmentSpan)
     }
   }
 }
