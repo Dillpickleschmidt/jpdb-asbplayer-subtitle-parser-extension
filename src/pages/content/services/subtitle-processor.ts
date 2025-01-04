@@ -59,7 +59,7 @@ export class SubtitleProcessor {
     text: string,
     onGroupProcessed?: (result: BatchProcessingResult) => void
   ): Promise<BatchProcessingResult | null> {
-    console.log("Processing window for text:", text)
+    // console.log("Processing window for text:", text)
 
     // First try exact match in cached results
     if (this.processedResults.has(text)) {

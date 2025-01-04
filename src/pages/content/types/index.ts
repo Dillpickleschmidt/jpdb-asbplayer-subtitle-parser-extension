@@ -1,9 +1,11 @@
-// Shared Types
+// types/index.ts
+
 export interface SegmentedWords {
   originalText: string // The original input text
   surfaceForms: string[] // Detected surface forms
   separatedForms: (string | string[])[] // Separated components
   baseForms: (string | string[] | null)[] // Base or dictionary forms
+  cardStates: Array<string | null> // The card state of the base forms
 }
 
 export interface VocabularyEntry {
@@ -16,7 +18,7 @@ export interface VocabularyEntry {
   frequencyRank: number
   meanings: string[]
   partOfSpeech: string[]
-  cardState: string | null
+  cardState: Array<string> | null
   position: number
   length: number
 }
@@ -33,6 +35,12 @@ export interface ProcessedSubtitle {
   vocabulary: VocabularyEntry[]
 }
 
+export interface baseFormStates {
+  baseWord: string
+  jpdbBaseWord: string
+  state: string[]
+}
+
 // Batch Processing Results
 export interface BatchProcessingResult {
   segmentation: SegmentedWords[]
@@ -47,14 +55,19 @@ export interface ChromeMessage<T = any> {
 }
 
 // JPDB API Types
-export interface JpdbToken {
-  vocabularyIndex: number
-  position: number
-  length: number
-  furigana?: (string | string[])[]
-}
+export type JpdbToken = [
+  vocabularyIndex: number,
+  position: number,
+  length: number,
+  furigana?: (string | string[])[] | null,
+]
 
 export interface JpdbBatchProcessingResult {
   tokens: JpdbToken[][]
   vocabulary: VocabularyEntry[]
+}
+
+export interface JpdbFetchCardStateResult {
+  tokens: number[][]
+  vocabulary: Array<Array<string | Array<string>>>
 }

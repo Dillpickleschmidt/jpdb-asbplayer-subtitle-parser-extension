@@ -9,7 +9,7 @@ import {
 export const createSubtitleManager = (
   updateCallback: (element: HTMLElement) => void,
   offscreenCallback: (element: HTMLElement) => void,
-  onComplete: () => void // Callback to signal all offscreen spans are collected
+  onComplete: () => void
 ) => {
   const isParentDocument = window.self === window.top
   const frameHandlers = createFrameHandlers(isParentDocument)

@@ -75,6 +75,7 @@ export async function parseText(text: string) {
 }
 
 export async function parseTextBatch(texts: string[]) {
+  console.log("Sending to jpdb...")
   return makeRequest("parse", {
     text: texts,
     token_fields: ["vocabulary_index", "position", "length", "furigana"],
@@ -90,6 +91,16 @@ export async function parseTextBatch(texts: string[]) {
       "part_of_speech",
       "card_state",
     ],
+  })
+}
+
+export async function fetchCardStates(texts: string) {
+  console.log("sending: ", texts)
+  return makeRequest("parse", {
+    text: texts,
+    token_fields: ["vocabulary_index", "position", "length"],
+    position_length_encoding: "utf16",
+    vocabulary_fields: ["spelling", "card_state"],
   })
 }
 

@@ -1,428 +1,405 @@
-// SubtitleStyler.ts
 import { createEffect, onCleanup } from "solid-js"
-import { JpdbSubtitleProcessor } from "../services/jpdb-processor"
+import { IchiMoeProcessor } from "../services/ichi-moe-processor"
+import { JpdbProcessor } from "../services/jpdb-processor"
 import { createSubtitleManager } from "../services/subtitle-manager"
-import { SubtitleProcessor } from "../services/subtitle-processor"
 import "../styles/subtitle.css"
 import {
-  BatchProcessingResult,
+  JpdbBatchProcessingResult,
+  JpdbToken,
   ProcessedSubtitle,
   SegmentedWords,
+  VocabularyEntry,
 } from "../types"
-import { getCardStateClass } from "../utils/card-state"
 
-// Types and Interfaces
-interface JpdbSegment {
-  position: number
-  length: number
-  end: number
-  text: string
-  vocabularyIndex: number
+// Configuration
+const MAX_GROUPS_TO_PROCESS = 6
+const BUFFER_SIZE = {
+  FORWARD: 2,
+  BACKWARD: 1,
 }
 
-interface IchiMoeWord {
-  text: string
-  position: number
-  length: number
-  baseForm: string | string[] | null
-  separatedForm: string | string[]
-  vocabularyEntry: any
-}
+// State Management
+const cachedSubtitles: string[] = []
+const processedResults = new Map<string, ProcessedSubtitle>()
+const processedGroups = new Set<number>()
+let currentProcessingPromise: Promise<void> | null = null
+let currentOnscreenSubtitle: string | null = null
 
-// 1. Main Entry Point & Initialization
 export function initializeSubtitleHandler(): void {
   createEffect(() => {
-    const state = {
-      offscreenSubtitleCollection: [] as HTMLElement[],
-      processor: null as SubtitleProcessor | null,
-      jpdbProcessor: null as JpdbSubtitleProcessor | null,
-      hasProcessedOffscreen: false,
-    }
-
-    // Setup handlers
-    const handlers = createSubtitleHandlers(state)
-
-    // Bind subtitle manager
     const { bind, unbind } = createSubtitleManager(
-      handlers.updateSubtitle,
-      handlers.updateOffscreenSubtitle,
-      handlers.onObservationComplete
+      processOnscreenSubtitle,
+      cacheOffscreenSubtitle,
+      processOffscreenSubtitles
     )
-
     bind()
     onCleanup(unbind)
   })
 }
 
-// 2. Subtitle Handler Creation
-function createSubtitleHandlers(state: {
-  offscreenSubtitleCollection: HTMLElement[]
-  processor: SubtitleProcessor | null
-  jpdbProcessor: JpdbSubtitleProcessor | null
-  hasProcessedOffscreen: boolean
-}) {
-  const updateSubtitle = async (element: HTMLElement) => {
-    if (!state.processor || !state.jpdbProcessor) return
-    await processSubtitle(element, state.processor, state.jpdbProcessor)
+function cacheOffscreenSubtitle(element: HTMLElement): void {
+  const text = element.textContent?.trim()
+  if (text && !cachedSubtitles.includes(text)) {
+    cachedSubtitles.push(text)
   }
-
-  const updateOffscreenSubtitle = (element: HTMLElement) => {
-    if (!state.hasProcessedOffscreen) {
-      state.offscreenSubtitleCollection.push(element)
-    }
-  }
-
-  const onObservationComplete = async () => {
-    if (!state.hasProcessedOffscreen) {
-      state.processor = new SubtitleProcessor(state.offscreenSubtitleCollection)
-      state.jpdbProcessor = new JpdbSubtitleProcessor(
-        state.offscreenSubtitleCollection
-      )
-      state.jpdbProcessor.logGroups()
-      await state.jpdbProcessor.processGroups()
-      state.hasProcessedOffscreen = true
-    }
-  }
-
-  return { updateSubtitle, updateOffscreenSubtitle, onObservationComplete }
 }
 
-// Set to track processed elements by their ID
-const processedElements = new Set<string>()
-
-// 3. Main Subtitle Processing
-async function processSubtitle(
-  element: HTMLElement,
-  processor: SubtitleProcessor,
-  jpdbProcessor: JpdbSubtitleProcessor
-): Promise<void> {
-  // Ensure element has an ID
-  if (!element.id) {
-    element.id = `subtitle-${Math.random().toString(36).substring(2)}`
-  }
-
-  // Skip if this specific element was already processed
-  if (processedElements.has(element.id)) {
-    console.log("Skipping already processed element:", element.id)
+async function processOffscreenSubtitles(element?: HTMLElement): Promise<void> {
+  if (!currentOnscreenSubtitle) {
+    console.warn("No onscreen subtitle available for processing.")
     return
   }
 
-  const text = element.textContent?.trim() || ""
-  const existingProcessed = element.nextElementSibling as HTMLElement
-
   try {
-    // Step 1: Get JPDB data (might be cached)
-    const jpdbData = await jpdbProcessor.getSegmentationForText(text)
+    const groupedSubtitles = IchiMoeProcessor.groupSubtitles(cachedSubtitles)
+    const onscreenGroupIndex = findOnscreenSubtitleGroup(groupedSubtitles)
 
-    // Step 2: Process subtitle window with callback
-    const onGroupProcessed = async (result: BatchProcessingResult) => {
-      // Double check if processed (for race conditions)
-      if (processedElements.has(element.id)) {
-        console.log("Skipping already processed element:", element.id)
-        return
-      }
-
-      console.log("Processing element:", element.id, "with text:", text)
-
-      const subtitleData = result.vocabulary.find(
-        (s) => s.originalText === text
-      )
-      const segmentationData = result.segmentation.find(
-        (s: SegmentedWords) => s.originalText === text
-      )
-
-      if (!subtitleData || !segmentationData || !jpdbData) return
-
-      // Mark this specific element as processed
-      processedElements.add(element.id)
-
-      // Step 3: Create DOM elements
-      const resultSpan = getOrCreateResultSpan(element, existingProcessed)
-
-      // Step 4: Process text data
-      const jpdbSegments = createJpdbSegments(text, jpdbData)
-      const ichiMoeWords = createIchiMoeWords(
-        text,
-        segmentationData,
-        subtitleData
-      )
-
-      // Step 5: Create spans and update DOM
-      createSpansForText(
-        text,
-        jpdbSegments,
-        ichiMoeWords,
-        subtitleData,
-        resultSpan
-      )
-      updateDOM(element, existingProcessed, resultSpan)
+    if (onscreenGroupIndex === -1) {
+      console.warn("Onscreen subtitle not found in cached subtitles")
+      return
     }
 
-    await processor.processSubtitleWindow(text, onGroupProcessed)
+    const processingSequence = generateProcessingSequence(
+      onscreenGroupIndex,
+      groupedSubtitles.length
+    )
+
+    console.log(`Processing sequence: ${processingSequence.join(", ")}`)
+
+    for (const groupIndex of processingSequence) {
+      if (processedGroups.has(groupIndex)) {
+        console.log(`Group ${groupIndex} already processed, skipping...`)
+        continue
+      }
+
+      await processGroup(groupIndex, groupedSubtitles, element)
+    }
+
+    console.log("All groups in range processed:", processedResults)
   } catch (error) {
-    handleProcessingError(error, element, existingProcessed)
+    console.error("Error processing offscreen subtitles:", error)
   }
 }
 
-// 4. Text Processing Functions
-function createJpdbSegments(text: string, jpdbData: any): JpdbSegment[] {
-  return jpdbData.tokens
-    .map((token: [number, number, number]) => ({
-      position: token[1],
-      length: token[2],
-      end: token[1] + token[2],
-      text: text.slice(token[1], token[1] + token[2]),
-      vocabularyIndex: token[0],
-    }))
-    .sort((a, b) => a.position - b.position)
+function findOnscreenSubtitleGroup(groupedSubtitles: string[][]): number {
+  return groupedSubtitles.findIndex((group) =>
+    group.some((subtitle) => subtitle.includes(currentOnscreenSubtitle!))
+  )
 }
 
-function createIchiMoeWords(
-  text: string,
-  segmentationData: SegmentedWords,
-  subtitleData: ProcessedSubtitle
-): IchiMoeWord[] {
-  let position = 0
-  const words: IchiMoeWord[] = []
+async function processGroup(
+  groupIndex: number,
+  groupedSubtitles: string[][],
+  onscreenElement?: HTMLElement
+) {
+  const groupText = groupedSubtitles[groupIndex].join(" ")
+  console.log(`Processing group ${groupIndex}: ${groupText.length} chars`)
 
-  segmentationData.surfaceForms.forEach((surfaceWord, index) => {
-    words.push({
-      text: surfaceWord,
-      position,
-      length: surfaceWord.length,
-      baseForm: segmentationData.baseForms[index],
-      separatedForm: segmentationData.separatedForms[index],
-      vocabularyEntry: null,
-    })
-    position += surfaceWord.length
+  const [morphemes, jpdbResults] = await Promise.all([
+    IchiMoeProcessor.fetchMorphemes(groupText),
+    JpdbProcessor.fetchVocabularyBatch(groupedSubtitles[groupIndex]),
+  ])
+
+  const groupResults = mapResultsToSubtitles(
+    groupedSubtitles[groupIndex],
+    morphemes,
+    jpdbResults
+  )
+
+  groupedSubtitles[groupIndex].forEach((subtitle, index) => {
+    processedResults.set(subtitle, groupResults[index])
+
+    // If this is the current onscreen subtitle, update it immediately
+    if (subtitle === currentOnscreenSubtitle && onscreenElement) {
+      console.log("Updating onscreen subtitle immediately:", subtitle)
+      updateSubtitleDisplay(onscreenElement, groupResults[index])
+    }
   })
 
-  return words
+  processedGroups.add(groupIndex)
+  console.log(`Completed processing group ${groupIndex}`)
 }
 
-function createSpansForWord(
-  word: IchiMoeWord,
-  segmentStart: number,
-  segmentEnd: number,
-  subtitleData: ProcessedSubtitle,
-  text: string
-): HTMLSpanElement[] {
-  const spans: HTMLSpanElement[] = []
+function mapResultsToSubtitles(
+  subtitles: string[],
+  morphemes: SegmentedWords,
+  jpdbResults: JpdbBatchProcessingResult
+): ProcessedSubtitle[] {
+  const sortedWords = getSortedMorphemeWords(morphemes)
 
-  if (Array.isArray(word.separatedForm)) {
-    // Handle compound word
-    let currentPos = word.position
-    word.separatedForm.forEach((component, componentIndex) => {
-      const componentStart = currentPos
-      const componentEnd = currentPos + component.length
+  return subtitles.map((subtitle) => ({
+    originalText: subtitle,
+    morphemes: processMorphemes(subtitle, sortedWords, morphemes),
+    vocabulary: mapVocabulary(subtitle, jpdbResults),
+  }))
+}
 
-      // Only create span if the component overlaps with the current segment
-      if (componentStart < segmentEnd && componentEnd > segmentStart) {
-        const spanStart = Math.max(componentStart, segmentStart)
-        const spanEnd = Math.min(componentEnd, segmentEnd)
-        const componentText = text.slice(spanStart, spanEnd)
+function getSortedMorphemeWords(morphemes: SegmentedWords) {
+  return morphemes.surfaceForms
+    .map((word, idx) => ({ word, idx }))
+    .sort((a, b) => b.word.length - a.word.length)
+}
 
-        const baseForm = Array.isArray(word.baseForm)
-          ? word.baseForm[componentIndex]
-          : null
+function processMorphemes(
+  subtitle: string,
+  sortedWords: Array<{ word: string; idx: number }>,
+  morphemes: SegmentedWords
+): SegmentedWords {
+  const result: SegmentedWords = {
+    originalText: subtitle,
+    surfaceForms: [],
+    separatedForms: [],
+    baseForms: [],
+  }
 
-        const span = createWordSpan(
-          componentText,
-          baseForm,
-          subtitleData.vocabulary
-        )
-        spans.push(span)
+  let remaining = subtitle
+  while (remaining.length > 0) {
+    const matchedWord = sortedWords.find(({ word }) =>
+      remaining.startsWith(word)
+    )
+
+    if (matchedWord) {
+      result.surfaceForms.push(matchedWord.word)
+      result.separatedForms.push(morphemes.separatedForms[matchedWord.idx])
+      result.baseForms.push(morphemes.baseForms[matchedWord.idx])
+      remaining = remaining.slice(matchedWord.word.length)
+    } else {
+      const char = remaining[0]
+      result.surfaceForms.push(char)
+      result.separatedForms.push(char)
+      result.baseForms.push(null)
+      remaining = remaining.slice(1)
+    }
+  }
+
+  return result
+}
+
+function mapVocabulary(
+  subtitle: string,
+  jpdbResults: JpdbBatchProcessingResult
+): VocabularyEntry[] {
+  return jpdbResults.tokens.flatMap((tokens) =>
+    tokens
+      .map((token) => createVocabEntry(subtitle, token, jpdbResults))
+      .filter((entry): entry is VocabularyEntry => entry !== null)
+  )
+}
+
+function createVocabEntry(
+  subtitle: string,
+  token: JpdbToken,
+  jpdbResults: JpdbBatchProcessingResult
+): VocabularyEntry | null {
+  const vocabEntry = jpdbResults.vocabulary[token[0]]
+  if (!vocabEntry) return null
+
+  return {
+    ...vocabEntry,
+    word: subtitle.slice(token[1], token[1] + token[2]),
+    position: token[1],
+    length: token[2],
+  }
+}
+
+function processOnscreenSubtitle(element: HTMLElement): void {
+  const text = element.textContent?.trim()
+  if (!text) {
+    console.warn("Empty subtitle element encountered")
+    return
+  }
+
+  currentOnscreenSubtitle = text
+
+  if (processedResults.has(text)) {
+    updateSubtitleDisplay(element, processedResults.get(text)!)
+    return
+  }
+
+  if (!currentProcessingPromise) {
+    currentProcessingPromise = processOffscreenSubtitles(element)
+      .then(() => {
+        // No need to update here since it will be updated as soon as its group is processed
+      })
+      .catch((error) => {
+        console.error("Failed to process subtitles:", error)
+      })
+      .finally(() => {
+        currentProcessingPromise = null
+      })
+  }
+}
+
+interface ProcessingBuffer {
+  forward: number
+  backward: number
+}
+
+interface ProcessingBounds {
+  start: number
+  end: number
+}
+
+function generateProcessingSequence(
+  currentIndex: number,
+  totalGroups: number,
+  buffer: ProcessingBuffer = {
+    forward: BUFFER_SIZE.FORWARD,
+    backward: BUFFER_SIZE.BACKWARD,
+  }
+): number[] {
+  const bounds: ProcessingBounds = {
+    start: Math.max(0, currentIndex - buffer.backward),
+    end: Math.min(totalGroups - 1, currentIndex + buffer.forward),
+  }
+
+  const sequence: number[] = []
+  if (!processedGroups.has(currentIndex)) {
+    sequence.push(currentIndex)
+  }
+
+  let forward = currentIndex + 1
+  let backward = currentIndex - 1
+
+  while (forward <= bounds.end || backward >= bounds.start) {
+    for (let i = 0; i < 2 && forward <= bounds.end; i++) {
+      if (!processedGroups.has(forward)) {
+        sequence.push(forward)
       }
-      currentPos += component.length
-    })
-  } else {
-    // Handle single word
-    const wordText = text.slice(
-      Math.max(word.position, segmentStart),
-      Math.min(word.position + word.length, segmentEnd)
-    )
-    spans.push(
-      createWordSpan(
-        wordText,
-        word.baseForm as string | null,
-        subtitleData.vocabulary
-      )
-    )
-  }
-
-  return spans
-}
-
-// 5. Span Creation Hierarchy
-function createSpansForText(
-  text: string,
-  jpdbSegments: JpdbSegment[],
-  ichiMoeWords: IchiMoeWord[],
-  subtitleData: ProcessedSubtitle,
-  resultSpan: HTMLSpanElement
-): void {
-  let currentPosition = 0
-
-  // Handle text before first segment
-  if (jpdbSegments.length > 0 && jpdbSegments[0].position > 0) {
-    appendNonSegmentText(
-      text,
-      0,
-      jpdbSegments[0].position,
-      subtitleData,
-      resultSpan
-    )
-    currentPosition = jpdbSegments[0].position
-  }
-
-  // Process each JPDB segment
-  jpdbSegments.forEach((segment) => {
-    // Add text between segments
-    if (segment.position > currentPosition) {
-      appendNonSegmentText(
-        text,
-        currentPosition,
-        segment.position,
-        subtitleData,
-        resultSpan
-      )
+      forward++
     }
 
-    // Create and append segment spans
-    const segmentSpan = createSpansForSegment(
-      text,
-      segment,
-      ichiMoeWords,
-      subtitleData
-    )
-    resultSpan.appendChild(segmentSpan)
-
-    currentPosition = segment.position + segment.length
-  })
-
-  // Handle remaining text
-  if (currentPosition < text.length) {
-    appendNonSegmentText(
-      text,
-      currentPosition,
-      text.length,
-      subtitleData,
-      resultSpan
-    )
+    if (backward >= bounds.start) {
+      if (!processedGroups.has(backward)) {
+        sequence.push(backward)
+      }
+      backward--
+    }
   }
+
+  return sequence
 }
 
-function createSpansForSegment(
+function createUnparsedSpan(text: string): HTMLSpanElement {
+  const span = document.createElement("span")
+  span.className = "jpdb-unparsed"
+  span.textContent = text
+  return span
+}
+
+function createParsedMorphemeSpan(
   text: string,
-  jpdbSegment: JpdbSegment,
-  ichiMoeWords: IchiMoeWord[],
-  subtitleData: ProcessedSubtitle
+  separatedForm: string | string[]
 ): HTMLSpanElement {
   const segmentSpan = document.createElement("span")
   segmentSpan.className = "jpdb-segment"
 
-  const overlappingWords = findOverlappingWords(jpdbSegment, ichiMoeWords)
+  const components = Array.isArray(separatedForm)
+    ? separatedForm
+    : separatedForm.split("")
 
-  if (overlappingWords.length === 0) {
-    const unparsedSpan = createWordSpan(
-      jpdbSegment.text,
-      null,
-      subtitleData.vocabulary
-    )
-    segmentSpan.appendChild(unparsedSpan)
-    return segmentSpan
-  }
-
-  overlappingWords.forEach((word) => {
-    const wordSpans = createSpansForWord(
-      word,
-      jpdbSegment.position,
-      jpdbSegment.end,
-      subtitleData,
-      text
-    )
-    wordSpans.forEach((span) => segmentSpan.appendChild(span))
+  components.forEach((component) => {
+    const componentSpan = document.createElement("span")
+    componentSpan.className = "jpdb-new"
+    componentSpan.textContent = component
+    segmentSpan.appendChild(componentSpan)
   })
 
   return segmentSpan
 }
 
-// 6. Helper Functions
-function getOrCreateResultSpan(
-  element: HTMLElement,
-  existingProcessed: HTMLElement
-): HTMLSpanElement {
-  const resultSpan = existingProcessed?.classList.contains("cr-subtitle")
-    ? existingProcessed
-    : document.createElement("span")
-
-  resultSpan.className = "cr-subtitle"
-  resultSpan.innerHTML = ""
-
-  return resultSpan
-}
-
-function updateDOM(
-  element: HTMLElement,
-  existingProcessed: HTMLElement,
-  resultSpan: HTMLSpanElement
+function processMorpheme(
+  crSubtitleSpan: HTMLSpanElement,
+  morpheme: string,
+  separatedForm: string | string[],
+  baseForm: string | string[] | null
 ): void {
-  if (!existingProcessed?.classList.contains("cr-subtitle")) {
-    element.parentNode?.insertBefore(resultSpan, element.nextSibling)
-    element.classList.add("hidden")
-    element.removeAttribute("style")
+  if (morpheme && separatedForm) {
+    if (baseForm === null) {
+      crSubtitleSpan.appendChild(createUnparsedSpan(morpheme))
+    } else {
+      crSubtitleSpan.appendChild(
+        createParsedMorphemeSpan(morpheme, separatedForm)
+      )
+    }
   }
 }
 
-function handleProcessingError(
-  error: any,
+function updateSubtitleDisplay(
   element: HTMLElement,
-  existingProcessed: HTMLElement
+  subtitleData: ProcessedSubtitle
 ): void {
-  console.error("Error processing subtitle:", error)
-  if (!existingProcessed?.classList.contains("cr-subtitle")) {
-    const errorSpan = document.createElement("span")
-    errorSpan.textContent = element.textContent || ""
-    element.parentNode?.insertBefore(errorSpan, element.nextSibling)
+  const crSubtitleSpan = document.createElement("span")
+  crSubtitleSpan.className = "cr-subtitle"
+
+  const sortedVocab = [...subtitleData.vocabulary].sort(
+    (a, b) => a.position - b.position
+  )
+  let currentPosition = 0
+  let currentMorphemeIndex = 0
+
+  for (const vocabEntry of sortedVocab) {
+    if (vocabEntry.position > currentPosition) {
+      const unparsedText = subtitleData.originalText.slice(
+        currentPosition,
+        vocabEntry.position
+      )
+
+      if (unparsedText) {
+        while (
+          currentMorphemeIndex < subtitleData.morphemes.separatedForms.length &&
+          subtitleData.morphemes.surfaceForms[currentMorphemeIndex].length <=
+            unparsedText.length
+        ) {
+          processMorpheme(
+            crSubtitleSpan,
+            subtitleData.morphemes.surfaceForms[currentMorphemeIndex],
+            subtitleData.morphemes.separatedForms[currentMorphemeIndex],
+            subtitleData.morphemes.baseForms[currentMorphemeIndex]
+          )
+          currentMorphemeIndex++
+        }
+      }
+    }
+
+    while (
+      currentMorphemeIndex < subtitleData.morphemes.separatedForms.length
+    ) {
+      const morpheme = subtitleData.morphemes.surfaceForms[currentMorphemeIndex]
+      if (
+        !morpheme ||
+        subtitleData.originalText.indexOf(morpheme, vocabEntry.position) !==
+          vocabEntry.position
+      ) {
+        break
+      }
+
+      processMorpheme(
+        crSubtitleSpan,
+        morpheme,
+        subtitleData.morphemes.separatedForms[currentMorphemeIndex],
+        subtitleData.morphemes.baseForms[currentMorphemeIndex]
+      )
+      currentMorphemeIndex++
+    }
+
+    currentPosition = vocabEntry.position + vocabEntry.length
   }
-}
 
-function findOverlappingWords(
-  segment: JpdbSegment,
-  words: IchiMoeWord[]
-): IchiMoeWord[] {
-  return words.filter((word) => {
-    const wordEnd = word.position + word.length
-    return word.position < segment.end && wordEnd > segment.position
-  })
-}
-
-function appendNonSegmentText(
-  text: string,
-  start: number,
-  end: number,
-  subtitleData: ProcessedSubtitle,
-  resultSpan: HTMLSpanElement
-): void {
-  const nonSegmentText = text.slice(start, end)
-  const span = createWordSpan(nonSegmentText, null, subtitleData.vocabulary)
-  resultSpan.appendChild(span)
-}
-
-function createWordSpan(
-  text: string,
-  baseForm: string | null,
-  vocabulary: ProcessedSubtitle["vocabulary"]
-): HTMLSpanElement {
-  const span = document.createElement("span")
-  span.textContent = text
-
-  if (baseForm) {
-    const vocabEntry = vocabulary.find((v) => v.spelling === baseForm)
-    span.className = `jpdb-word ${getCardStateClass(vocabEntry?.cardState || null)}`
-  } else {
-    span.className = "jpdb-word jpdb-unparsed"
+  if (currentPosition < subtitleData.originalText.length) {
+    while (
+      currentMorphemeIndex < subtitleData.morphemes.separatedForms.length
+    ) {
+      processMorpheme(
+        crSubtitleSpan,
+        subtitleData.morphemes.surfaceForms[currentMorphemeIndex],
+        subtitleData.morphemes.separatedForms[currentMorphemeIndex],
+        subtitleData.morphemes.baseForms[currentMorphemeIndex]
+      )
+      currentMorphemeIndex++
+    }
   }
 
-  return span
+  element.classList.add("hidden")
+  element.parentNode?.insertBefore(crSubtitleSpan, element.nextSibling)
 }

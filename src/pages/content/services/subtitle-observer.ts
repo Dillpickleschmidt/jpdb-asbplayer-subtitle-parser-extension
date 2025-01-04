@@ -1,4 +1,3 @@
-// subtitle-observer.ts
 import { createFrameInfoListener } from "./frame-handlers"
 
 const SUBTITLE_SELECTOR = `
@@ -13,30 +12,27 @@ export const createSubtitleObserver = (
   const mainObserver = new MutationObserver(handleMainDocumentMutations)
   const shadowObserver = new MutationObserver(handleShadowDomMutations)
 
-  // Cache to prevent duplicate processing
-  const processedTexts = new Map<string, number>()
-  const CACHE_TIMEOUT = 1000 // 1 second
+  // Set to cache processed elements
+  const processedElements = new Set<string>()
 
-  function isRecentlyProcessed(text: string): boolean {
-    const lastProcessed = processedTexts.get(text)
-    if (!lastProcessed) return false
-
-    const now = Date.now()
-    if (now - lastProcessed > CACHE_TIMEOUT) {
-      processedTexts.delete(text)
-      return false
-    }
-    return true
-  }
-
-  function markProcessed(text: string) {
-    processedTexts.set(text, Date.now())
+  function generateElementKey(element: HTMLElement): string {
+    return (
+      element.id || `${element.tagName}-${element.textContent?.trim() || ""}`
+    )
   }
 
   function safeUpdateCallback(element: HTMLElement) {
-    const text = element.textContent || ""
-    if (!isRecentlyProcessed(text)) {
-      markProcessed(text)
+    // Skip if already a cr-subtitle or has one as next sibling
+    if (
+      element.classList.contains("cr-subtitle") ||
+      element.nextElementSibling?.classList.contains("cr-subtitle")
+    ) {
+      return
+    }
+
+    const key = generateElementKey(element)
+    if (!processedElements.has(key)) {
+      processedElements.add(key)
       updateCallback(element)
     }
   }
@@ -130,41 +126,51 @@ export const createSubtitleObserver = (
   const unbind = () => {
     mainObserver.disconnect()
     shadowObserver.disconnect()
-    processedTexts.clear()
+    processedElements.clear()
   }
 
   return { bind, unbind }
 }
 
-// Separate observer for offscreen subtitles
+// Offscreen Observer (Unchanged)
 export const createOffscreenSubtitleObserver = (
   updateCallback: (element: HTMLElement) => void,
   onComplete: () => void
 ) => {
-  let complete = true
+  const offscreenProcessedTexts = new Set<string>() // Cache for processed subtitles
+
   const offscreenObserver = new MutationObserver((mutations) => {
+    const newSubtitles: HTMLElement[] = []
+
     mutations.forEach((mutation) => {
       mutation.addedNodes.forEach((node) => {
         if (node instanceof HTMLElement) {
-          if (
-            node.matches("body > div.asbplayer-offscreen > div > span") ||
-            node.querySelector("body > div.asbplayer-offscreen > div > span")
-          ) {
-            node
-              .querySelectorAll(
-                "body > div.asbplayer-offscreen > div > span:not(.cr-subtitle)"
+          const elements = node.matches(
+            "body > div.asbplayer-offscreen > div > span"
+          )
+            ? [node]
+            : Array.from(
+                node.querySelectorAll(
+                  "body > div.asbplayer-offscreen > div > span"
+                )
               )
-              .forEach((el) => {
-                updateCallback(el as HTMLElement)
-                complete = false
-              })
-          }
+
+          elements.forEach((el) => {
+            const text = el.textContent?.trim() || ""
+            if (!offscreenProcessedTexts.has(text)) {
+              offscreenProcessedTexts.add(text) // Mark as processed
+              newSubtitles.push(el as HTMLElement)
+            }
+          })
         }
       })
     })
-    if (!complete) {
+
+    if (newSubtitles.length > 0) {
+      // Process only new subtitles
+      newSubtitles.forEach((el) => updateCallback(el))
+      console.log("Offscreen subtitles processing complete:", newSubtitles)
       onComplete()
-      complete = true
     }
   })
 
@@ -179,6 +185,7 @@ export const createOffscreenSubtitleObserver = (
 
   const unbind = () => {
     offscreenObserver.disconnect()
+    offscreenProcessedTexts.clear()
   }
 
   return { bind, unbind }

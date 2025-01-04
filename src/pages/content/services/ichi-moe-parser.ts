@@ -111,10 +111,11 @@ export const parseIchiMoe = (htmlContent: string): SegmentedWords => {
   const cleanedBase = cleanWords(baseForms) as (string | string[] | null)[]
 
   return {
-    originalText: doc.body.textContent?.trim() ?? "",
+    originalText: undefined,
     surfaceForms: cleanedSurface,
     separatedForms: cleanedSeparated,
     baseForms: cleanedBase,
+    cardStates: cleanedBase.map(() => null),
   }
 }
 
