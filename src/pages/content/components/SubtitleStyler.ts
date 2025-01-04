@@ -9,9 +9,9 @@ import {
   ProcessedSubtitle,
   SegmentedWords,
 } from "../types"
+import { getCardStateClass } from "../utils/card-state"
 
 // Configuration
-const MAX_GROUPS_TO_PROCESS = 6
 const BUFFER_SIZE = {
   FORWARD: 0,
   BACKWARD: 0,
@@ -52,13 +52,12 @@ async function processOffscreenSubtitles(element?: HTMLElement): Promise<void> {
   try {
     const groupedSubtitles = IchiMoeProcessor.groupSubtitles(cachedSubtitles)
     const onscreenGroupIndex = findOnscreenSubtitleGroup(groupedSubtitles)
-
     if (onscreenGroupIndex === -1) {
-      console.warn("Onscreen subtitle not found in cached subtitles")
+      console.warn("Onscreen subtitle not found in cached subtitles.")
       return
     }
 
-    console.log("Fetching vocabulary batch for all grouped subtitles...")
+    console.log("Fetching vocabulary batch for grouped subtitles...")
     const allVocabularyResults = await JpdbProcessor.fetchVocabularyBatch(
       groupedSubtitles.flat()
     )
@@ -68,25 +67,20 @@ async function processOffscreenSubtitles(element?: HTMLElement): Promise<void> {
       groupedSubtitles.length
     )
 
-    console.log(`Processing sequence: ${processingSequence.join(", ")}`)
-
     for (const groupIndex of processingSequence) {
-      if (processedGroups.has(groupIndex)) {
-        console.log(`Group ${groupIndex} already processed, skipping...`)
-        continue
+      if (!processedGroups.has(groupIndex)) {
+        await processGroup(
+          groupIndex,
+          groupedSubtitles,
+          allVocabularyResults,
+          element
+        )
       }
-
-      await processGroup(
-        groupIndex,
-        groupedSubtitles,
-        allVocabularyResults,
-        element
-      )
     }
 
-    console.log("All groups in range processed:", processedResults)
+    console.log("All groups processed:", processedResults)
   } catch (error) {
-    console.error("Error processing offscreen subtitles:", error)
+    console.error("Error processing subtitles:", error)
   }
 }
 
@@ -105,33 +99,16 @@ async function processGroup(
   const groupText = groupedSubtitles[groupIndex].join(" ")
   console.log(`Processing group ${groupIndex}: ${groupText.length} chars`)
 
-  // Fetch morphemes from ichi.moe
   const morphemes = await IchiMoeProcessor.fetchMorphemes(groupText)
+  console.log("Fetched morphemes:", morphemes)
 
-  // Extract all base forms from morphemes
   const baseFormsForCardStates = morphemes.baseForms
     .flatMap((form) => (Array.isArray(form) ? form : [form]))
     .join(" ")
+  const baseFormStates = await fetchCardStates(baseFormsForCardStates)
 
-  // Fetch card states for all base forms
-  const cardStatesResult = await JpdbProcessor.fetchCardStates(
-    baseFormsForCardStates
-  )
+  console.log("Base form states:", baseFormStates)
 
-  const baseFormStates: alignedBaseFormState[] = cardStatesResult.tokens.map(
-    (token) => {
-      const vocabEntry = cardStatesResult.vocabulary[token[0]]
-      return {
-        baseWord: baseFormsForCardStates.slice(token[1], token[1] + token[2]),
-        jpdbBaseWord: vocabEntry[0] as string,
-        state: vocabEntry[1] as string[],
-      }
-    }
-  )
-
-  console.log("baseFormStates:", baseFormStates)
-
-  // Map results to individual subtitles
   const groupResults = mapResultsToSubtitles(
     groupedSubtitles[groupIndex],
     morphemes,
@@ -139,12 +116,9 @@ async function processGroup(
     baseFormStates
   )
 
-  // Store results and update UI if needed
   groupedSubtitles[groupIndex].forEach((subtitle, index) => {
     processedResults.set(subtitle, groupResults[index])
-
     if (subtitle === currentOnscreenSubtitle && onscreenElement) {
-      console.log("Updating onscreen subtitle immediately:", subtitle)
       updateSubtitleDisplay(onscreenElement, groupResults[index])
     }
   })
@@ -152,6 +126,20 @@ async function processGroup(
   processedGroups.add(groupIndex)
   console.log(`Completed processing group ${groupIndex}`)
   console.log("Updated processed results:", processedResults)
+}
+
+async function fetchCardStates(
+  baseForms: string
+): Promise<alignedBaseFormState[]> {
+  const cardStatesResult = await JpdbProcessor.fetchCardStates(baseForms)
+  return cardStatesResult.tokens.map((token) => {
+    const vocabEntry = cardStatesResult.vocabulary[token[0]]
+    return {
+      baseWord: baseForms.slice(token[1], token[1] + token[2]),
+      jpdbBaseWord: vocabEntry[0] as string,
+      state: vocabEntry[1] as string[],
+    }
+  })
 }
 
 function mapResultsToSubtitles(
@@ -288,38 +276,26 @@ interface ProcessingBounds {
 
 function generateProcessingSequence(
   currentIndex: number,
-  totalGroups: number,
-  buffer: ProcessingBuffer = {
-    forward: BUFFER_SIZE.FORWARD,
-    backward: BUFFER_SIZE.BACKWARD,
-  }
+  totalGroups: number
 ): number[] {
-  const bounds: ProcessingBounds = {
-    start: Math.max(0, currentIndex - buffer.backward),
-    end: Math.min(totalGroups - 1, currentIndex + buffer.forward),
-  }
-
   const sequence: number[] = []
-  if (!processedGroups.has(currentIndex)) {
-    sequence.push(currentIndex)
+  const bounds = {
+    start: Math.max(0, currentIndex - BUFFER_SIZE.BACKWARD),
+    end: Math.min(totalGroups - 1, currentIndex + BUFFER_SIZE.FORWARD),
   }
 
-  let forward = currentIndex + 1
-  let backward = currentIndex - 1
-
-  while (forward <= bounds.end || backward >= bounds.start) {
-    for (let i = 0; i < 2 && forward <= bounds.end; i++) {
-      if (!processedGroups.has(forward)) {
-        sequence.push(forward)
-      }
-      forward++
+  for (let i = 0; i <= Math.max(bounds.end - bounds.start, 0); i++) {
+    if (
+      currentIndex + i <= bounds.end &&
+      !processedGroups.has(currentIndex + i)
+    ) {
+      sequence.push(currentIndex + i)
     }
-
-    if (backward >= bounds.start) {
-      if (!processedGroups.has(backward)) {
-        sequence.push(backward)
-      }
-      backward--
+    if (
+      currentIndex - i >= bounds.start &&
+      !processedGroups.has(currentIndex - i)
+    ) {
+      sequence.push(currentIndex - i)
     }
   }
 
@@ -333,32 +309,12 @@ function createUnparsedSpan(text: string): HTMLSpanElement {
   return span
 }
 
-function createParsedMorphemeSpan(
-  text: string,
-  separatedForm: string | string[]
-): HTMLSpanElement {
-  const segmentSpan = document.createElement("span")
-  segmentSpan.className = "jpdb-segment"
-
-  const components = Array.isArray(separatedForm)
-    ? separatedForm
-    : separatedForm.split("")
-
-  components.forEach((component) => {
-    const componentSpan = document.createElement("span")
-    componentSpan.className = "jpdb-new"
-    componentSpan.textContent = component
-    segmentSpan.appendChild(componentSpan)
-  })
-
-  return segmentSpan
-}
-
 function processMorpheme(
   crSubtitleSpan: HTMLSpanElement,
   morpheme: string,
   separatedForm: string | string[],
-  baseForm: string | string[] | null
+  baseForm: string | string[] | null,
+  cardState: string | string[] | null
 ): void {
   if (morpheme && separatedForm) {
     if (baseForm === null) {
@@ -371,16 +327,21 @@ function processMorpheme(
 
       if (Array.isArray(separatedForm)) {
         // Handle array of separated forms (e.g., ['されて', 'きて'])
-        separatedForm.forEach((component) => {
+        separatedForm.forEach((component, index) => {
           const componentSpan = document.createElement("span")
-          componentSpan.className = "jpdb-new"
+          const state =
+            Array.isArray(cardState) && cardState[index]
+              ? cardState[index]
+              : null
+          componentSpan.className = getCardStateClass(state)
           componentSpan.textContent = component
           segmentSpan.appendChild(componentSpan)
         })
       } else {
         // Handle single separated form (e.g., 'ずっと')
         const componentSpan = document.createElement("span")
-        componentSpan.className = "jpdb-new"
+        const state = Array.isArray(cardState) ? cardState[0] : cardState
+        componentSpan.className = getCardStateClass(state)
         componentSpan.textContent = separatedForm
         segmentSpan.appendChild(componentSpan)
       }
@@ -420,7 +381,8 @@ function updateSubtitleDisplay(
             crSubtitleSpan,
             subtitleData.morphemes.surfaceForms[currentMorphemeIndex],
             subtitleData.morphemes.separatedForms[currentMorphemeIndex],
-            subtitleData.morphemes.baseForms[currentMorphemeIndex]
+            subtitleData.morphemes.baseForms[currentMorphemeIndex],
+            subtitleData.morphemes.cardStates[currentMorphemeIndex]
           )
           currentMorphemeIndex++
         }
@@ -443,7 +405,8 @@ function updateSubtitleDisplay(
         crSubtitleSpan,
         morpheme,
         subtitleData.morphemes.separatedForms[currentMorphemeIndex],
-        subtitleData.morphemes.baseForms[currentMorphemeIndex]
+        subtitleData.morphemes.baseForms[currentMorphemeIndex],
+        subtitleData.morphemes.cardStates[currentMorphemeIndex]
       )
       currentMorphemeIndex++
     }
@@ -459,7 +422,8 @@ function updateSubtitleDisplay(
         crSubtitleSpan,
         subtitleData.morphemes.surfaceForms[currentMorphemeIndex],
         subtitleData.morphemes.separatedForms[currentMorphemeIndex],
-        subtitleData.morphemes.baseForms[currentMorphemeIndex]
+        subtitleData.morphemes.baseForms[currentMorphemeIndex],
+        subtitleData.morphemes.cardStates[currentMorphemeIndex]
       )
       currentMorphemeIndex++
     }
