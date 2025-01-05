@@ -1,7 +1,6 @@
 import { createEffect, onCleanup } from "solid-js"
 import { JpdbProcessor } from "../services/jpdb-processor"
 import { createSubtitleManager } from "../services/subtitle-manager"
-import "../styles/subtitle.css"
 import { ProcessedSubtitle } from "../types"
 import { getCardStateClass } from "../utils/card-state"
 import { SubtitleMouseHandler } from "./subtitle-mouse-handler"
@@ -14,8 +13,35 @@ let currentOnscreenSubtitle: string | null = null
 let lastProcessedBatch: string | null = null
 let mouseHandler: SubtitleMouseHandler | null = null
 
+function initializeStyles(): void {
+  // Create style element if it doesn't exist
+  let style = document.getElementById("jpdb-custom-styles")
+  if (!style) {
+    style = document.createElement("style")
+    style.id = "jpdb-custom-styles"
+    document.head.appendChild(style)
+  }
+
+  // Load styles from storage
+  chrome.storage.sync.get(["customWordCSS"], (result) => {
+    if (result.customWordCSS) {
+      style.textContent = result.customWordCSS
+    }
+  })
+
+  // Listen for style updates
+  chrome.storage.onChanged.addListener((changes) => {
+    if (changes.customWordCSS) {
+      style.textContent = changes.customWordCSS.newValue
+    }
+  })
+}
+
 export function initializeSubtitleHandler(): void {
   createEffect(() => {
+    // Initialize styles first
+    initializeStyles()
+
     mouseHandler = new SubtitleMouseHandler(processedResults)
 
     const { bind, unbind } = createSubtitleManager(

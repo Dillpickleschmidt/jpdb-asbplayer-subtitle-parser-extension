@@ -1,7 +1,5 @@
-import logo from "@assets/img/logo.svg"
 import "@src/styles/index.css"
 import { createEffect, createSignal } from "solid-js"
-import styles from "./Popup.module.css"
 
 export default function Popup() {
   const [apiKey, setApiKey] = createSignal("")
@@ -32,12 +30,11 @@ export default function Popup() {
   }
 
   return (
-    <div class={styles.App}>
-      <header class={styles.header}>
-        <img src={logo} class={styles.logo} alt="logo" />
+    <div class="text-center">
+      <header class="flex flex-col items-center justify-center bg-[#282c34] text-base text-white">
+        {/* <img src={logo} class={styles.logo} alt="logo" /> */}
         <div class="flex w-full max-w-md flex-col gap-4 p-4">
-          <h2 class="text-xl font-bold">JPDB Settings</h2>
-
+          <h2 class="text-xl font-bold">JPDB Subtitle Parser</h2>
           <div class="flex flex-col gap-2">
             <label for="apiKey" class="font-medium">
               JPDB API Key
@@ -53,14 +50,12 @@ export default function Popup() {
               Current key: {currentKey() || "No key set"}
             </div>
           </div>
-
           <button
             onClick={handleSaveKey}
-            class="rounded-md bg-blue-500 px-4 py-2 text-white transition-colors hover:bg-blue-600"
+            class="rounded-md border-2 border-neutral-400/25 bg-neutral-500 px-4 py-2 text-white transition-colors hover:bg-neutral-600"
           >
             Save API Key
           </button>
-
           {status() && (
             <p
               class={
@@ -70,6 +65,12 @@ export default function Popup() {
               {status()}
             </p>
           )}
+          <button
+            onClick={() => chrome.runtime.openOptionsPage()}
+            class="rounded-md border-2 border-indigo-300/25 bg-indigo-400 px-4 py-2 text-black transition-colors hover:bg-indigo-500"
+          >
+            Open Settings
+          </button>
         </div>
       </header>
     </div>

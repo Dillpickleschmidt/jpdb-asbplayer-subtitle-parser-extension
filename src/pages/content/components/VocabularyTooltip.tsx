@@ -17,36 +17,38 @@ export default function VocabularyTooltip(props: {
   vocabulary: VocabularyEntry
 }) {
   return (
-    <div class="absolute -top-20 left-1/2 z-50 flex w-80 -translate-x-1/2 -translate-y-full flex-col justify-between overflow-x-hidden rounded-md bg-black/95 text-start text-base text-white shadow-lg">
+    <div class="absolute -top-20 left-1/2 z-50 flex w-80 -translate-x-1/2 -translate-y-full flex-col justify-between overflow-x-hidden rounded-md bg-black/95 text-start text-base text-white shadow-lg hover:cursor-default">
       <div class="max-h-64 overflow-y-auto p-4">
         <div class="mb-2 flex justify-between">
           <div class="flex">
             <div>
               <div class="text-3xl font-bold">{props.vocabulary.spelling}</div>
-              <div class="text-sm leading-6">
+              <div class="cursor-text text-sm leading-6">
                 {props.vocabulary.partOfSpeech.join(", ")}
               </div>
             </div>
             <Show when={props.vocabulary.spelling != props.vocabulary.reading}>
-              <div class="text-lg font-medium">
+              <div class="cursor-text text-lg font-medium">
                 【{props.vocabulary.reading}】
               </div>
             </Show>
           </div>
           <div class="flex flex-col items-end justify-between">
-            <div class="text-right text-xs font-normal italic opacity-70">
+            <div class="cursor-text text-right text-xs font-normal italic opacity-70">
               Rank #{props.vocabulary.frequencyRank}
             </div>
             <div>
               <For each={props.vocabulary.cardState}>
                 {(cardState) => (
-                  <div class="text-end italic leading-5">{cardState}</div>
+                  <div class="cursor-text text-end italic leading-5">
+                    {cardState}
+                  </div>
                 )}
               </For>
             </div>
           </div>
         </div>
-        <div class="space-y-0.5 p-1 font-normal">
+        <div class="cursor-text space-y-0.5 p-1 font-normal">
           <For each={props.vocabulary.meanings}>
             {(meaning) => (
               <div>
@@ -57,17 +59,17 @@ export default function VocabularyTooltip(props: {
           </For>
         </div>
       </div>
-      <div class="flex w-full space-x-0.5 px-3 pb-3 pt-1">
-        <button class="h-8 w-full rounded-md border border-black bg-red-500 text-black">
+      <div class="grid w-full grid-cols-4 gap-1 px-3 pb-3 pt-1">
+        <button class="h-8 rounded-md border border-black bg-red-500 text-black">
           Add
         </button>
-        <button class="h-8 w-full rounded-md border border-black bg-yellow-500 text-black">
+        <button class="h-8 rounded-md border border-black bg-yellow-500 text-black">
           Add
         </button>
-        <button class="h-8 w-full rounded-md border border-black bg-green-500 text-black">
+        <button class="h-8 rounded-md border border-black bg-green-500 text-black">
           Add
         </button>
-        <button class="h-8 w-full rounded-md border border-black bg-sky-500 text-black">
+        <button class="h-8 rounded-md border border-black bg-sky-500 text-black">
           Add
         </button>
       </div>

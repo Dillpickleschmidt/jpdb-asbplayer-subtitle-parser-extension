@@ -1,4 +1,5 @@
 // background/index.ts
+import { defaultCSS } from "../options/css"
 import { fetchIchiMoe } from "./api/ichi-moe"
 import * as JpdbApi from "./api/jpdb"
 
@@ -48,4 +49,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     success: false,
     error: "Invalid request type.",
   })
+})
+
+// Listen for extension installation
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason === "install") {
+    // Set default CSS on first installation
+    chrome.storage.sync.set({ customWordCSS: defaultCSS }, () => {
+      console.log("Default CSS installed")
+    })
+  }
 })
