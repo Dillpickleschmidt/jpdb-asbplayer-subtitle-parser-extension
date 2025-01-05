@@ -196,11 +196,17 @@ function mapResultsToSubtitles(
         remainingText = remainingText.slice(1)
       }
     }
+    const rawSubtitleIndex = cachedSubtitles.indexOf(
+      cachedSubtitles.find((s) => s.includes(subtitle))
+    )
+    const vocabulary = jpdbResults.tokens[rawSubtitleIndex].map(
+      (token) => jpdbResults.vocabulary[token[0]]
+    )
 
     return {
       originalText: subtitle,
       morphemes: processedMorphemes,
-      vocabulary: [], // Can be populated later if needed
+      vocabulary: vocabulary,
     }
   })
 }
