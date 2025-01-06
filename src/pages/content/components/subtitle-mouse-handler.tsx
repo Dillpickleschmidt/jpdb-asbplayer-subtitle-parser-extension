@@ -1,5 +1,7 @@
 // subtitle-mouse-handler.tsx
+import { DEFAULT_SETTINGS } from "@src/types"
 import { render } from "solid-js/web"
+import { tinykeys } from "tinykeys"
 import { ProcessedSubtitle } from "../types"
 import VocabularyTooltip from "./VocabularyTooltip"
 
@@ -8,40 +10,66 @@ export class SubtitleMouseHandler {
   private activeSegment: HTMLElement | null = null
   private hoveredSegment: HTMLElement | null = null
   private dispose: (() => void) | null = null
-  private isShiftPressed = false
+  private unsubscribe: (() => void) | null = null
 
   constructor(processedResults: Map<string, ProcessedSubtitle>) {
     this.processedResults = processedResults
     this.initialize()
   }
 
-  private initialize(): void {
-    document.addEventListener("keydown", this.handleKeyDown.bind(this))
-    document.addEventListener("keyup", this.handleKeyUp.bind(this))
+  private async initialize(): Promise<void> {
+    // Load keybinds from storage
+    const result = await chrome.storage.sync.get(["keybinds"])
+    const keybinds = result.keybinds || DEFAULT_SETTINGS.keybinds
+    console.log("Loading keybinds:", keybinds) // Debug log
+    this.setupKeybindListener(keybinds.showPopup)
+
+    // Listen for storage changes
+    chrome.storage.onChanged.addListener((changes, namespace) => {
+      if (namespace === "sync" && changes.keybinds) {
+        const newKeybinds = changes.keybinds
+          .newValue as typeof DEFAULT_SETTINGS.keybinds
+        console.log("Keybinds changed:", newKeybinds) // Debug log
+        this.setupKeybindListener(newKeybinds.showPopup)
+      }
+    })
+
     document.addEventListener("mouseover", this.handleMouseOver.bind(this))
     document.addEventListener("mouseout", this.handleMouseOut.bind(this))
     document.addEventListener("click", this.handleClick.bind(this))
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") this.closeTooltip()
-    })
   }
 
-  private handleKeyDown(event: KeyboardEvent): void {
-    if (event.key === "Shift" && !this.isShiftPressed) {
-      this.isShiftPressed = true
-      if (this.hoveredSegment) {
-        this.processSegment(this.hoveredSegment)
-      }
+  private setupKeybindListener(keybindStr: string) {
+    // Clean up existing listener
+    if (this.unsubscribe) {
+      this.unsubscribe()
     }
-  }
 
-  private handleKeyUp(event: KeyboardEvent): void {
-    if (event.key === "Shift") {
-      this.isShiftPressed = false
-      if (this.activeSegment !== this.hoveredSegment) {
+    console.log("Setting up listener for:", keybindStr) // Debug log
+
+    // Set up new keybind listener using tinykeys
+    this.unsubscribe = tinykeys(window, {
+      [keybindStr]: (event) => {
+        console.log("Keybind triggered:", keybindStr) // Debug log
+        if (this.hoveredSegment) {
+          event.preventDefault()
+          // If we're hovering a different segment than the active one, close the tooltip
+          if (
+            this.activeSegment &&
+            this.hoveredSegment !== this.activeSegment
+          ) {
+            this.closeTooltip()
+          }
+          this.processSegment(this.hoveredSegment)
+        } else {
+          // If we're not hovering any segment, close any open tooltip
+          this.closeTooltip()
+        }
+      },
+      Escape: () => {
         this.closeTooltip()
-      }
-    }
+      },
+    })
   }
 
   private handleMouseOver(event: MouseEvent): void {
@@ -50,9 +78,6 @@ export class SubtitleMouseHandler {
     ) as HTMLElement
     if (segment) {
       this.hoveredSegment = segment
-      if (this.isShiftPressed) {
-        this.processSegment(segment)
-      }
     }
   }
 
@@ -133,8 +158,9 @@ export class SubtitleMouseHandler {
   }
 
   public destroy(): void {
-    document.removeEventListener("keydown", this.handleKeyDown.bind(this))
-    document.removeEventListener("keyup", this.handleKeyUp.bind(this))
+    if (this.unsubscribe) {
+      this.unsubscribe()
+    }
     document.removeEventListener("mouseover", this.handleMouseOver.bind(this))
     document.removeEventListener("mouseout", this.handleMouseOut.bind(this))
     document.removeEventListener("click", this.handleClick.bind(this))

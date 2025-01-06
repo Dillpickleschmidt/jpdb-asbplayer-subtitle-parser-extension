@@ -20,7 +20,8 @@
   },
   "type": "module",
   "dependencies": {
-    "solid-js": "^1.8.19"
+    "solid-js": "^1.8.19",
+    "tinykeys": "^3.0.0"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.28",

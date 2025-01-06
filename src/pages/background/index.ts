@@ -1,4 +1,5 @@
 // background/index.ts
+import { DEFAULT_SETTINGS } from "@src/types"
 import { buildCSS } from "../options/cssConfig"
 import { fetchIchiMoe } from "./api/ichi-moe"
 import * as JpdbApi from "./api/jpdb"
@@ -56,6 +57,8 @@ const initializeDefaultSettings = () => {
   chrome.storage.sync.set(
     {
       customWordCSS: buildCSS(),
+      keybinds: DEFAULT_SETTINGS.keybinds,
+      tooltipButtons: DEFAULT_SETTINGS.tooltipButtons,
     },
     () => {
       console.log("Default CSS installed")
