@@ -1,53 +1,23 @@
-export const defaultCSS = `.jpdb-word {
+// cssConfig.ts
+export const colorConfig = [
+  { class: "jpdb-not-in-deck", label: "Not in deck", color: "#ffffff" },
+  { class: "jpdb-locked", label: "Locked", color: "#a0522d" },
+  { class: "jpdb-redundant", label: "Redundant", color: "#708090" },
+  { class: "jpdb-new", label: "New", color: "#ff4500" },
+  { class: "jpdb-learning", label: "Learning", color: "#4169e1" },
+  { class: "jpdb-known", label: "Known", color: "#228b22" },
+  { class: "jpdb-never-forget", label: "Never forget", color: "#9370db" },
+  { class: "jpdb-due", label: "Due", color: "#ffd700" },
+  { class: "jpdb-failed", label: "Failed", color: "#dc143c" },
+  { class: "jpdb-suspended", label: "Suspended", color: "#696969" },
+  { class: "jpdb-blacklisted", label: "Blacklisted", color: "#b0b0b0" },
+  { class: "jpdb-unparsed", label: "Unparsed", color: "#ffffff" },
+] as const
+
+// Base CSS that doesn't change
+const baseCSS = `
+.jpdb-word {
   /* Base word styling if needed */
-}
-
-.jpdb-not-in-deck {
-  color: #ffffff;
-}
-
-.jpdb-locked {
-  color: #a0522d;
-}
-
-.jpdb-redundant {
-  color: #708090;
-}
-
-.jpdb-new {
-  color: #ff4500;
-}
-
-.jpdb-learning {
-  color: #4169e1;
-}
-
-.jpdb-known {
-  color: #228b22;
-}
-
-.jpdb-never-forget {
-  color: #9370db;
-}
-
-.jpdb-due {
-  color: #ffd700;
-}
-
-.jpdb-failed {
-  color: #dc143c;
-}
-
-.jpdb-suspended {
-  color: #696969;
-}
-
-.jpdb-blacklisted {
-  color: #b0b0b0;
-}
-
-.jpdb-unparsed {
-  color: #ffffff;
 }
 
 .jpdb-segment {
@@ -142,3 +112,27 @@ export const defaultCSS = `.jpdb-word {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }`
+
+// Simple function to get colors from CSS
+export const getColorsFromCSS = (css: string) => {
+  const colors = {}
+  colorConfig.forEach((config) => {
+    const regex = new RegExp(
+      `\\.${config.class}\\s*{\\s*color:\\s*(#[0-9a-fA-F]{6})\\s*}`
+    )
+    const match = css.match(regex)
+    colors[config.class] = match?.[1] || config.color
+  })
+  return colors
+}
+
+// Simple function to build CSS with colors
+export const buildCSS = (colors = {}) => {
+  const colorCSS = colorConfig
+    .map(
+      (config) =>
+        `.${config.class} { color: ${colors[config.class] || config.color}; }`
+    )
+    .join("\n")
+  return baseCSS + "\n\n" + colorCSS
+}

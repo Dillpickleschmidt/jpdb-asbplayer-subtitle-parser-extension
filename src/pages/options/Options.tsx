@@ -1,10 +1,12 @@
+// Options.tsx
 import "@src/styles/index.css"
 import { createEffect, createSignal } from "solid-js"
 import KeybindCapture from "./components/KeybindCapture"
-import { defaultCSS } from "./css"
+import { buildCSS, colorConfig, getColorsFromCSS } from "./cssConfig"
 
 const Options = () => {
-  const [customCSS, setCustomCSS] = createSignal(defaultCSS)
+  const [customCSS, setCustomCSS] = createSignal(buildCSS())
+  const [colors, setColors] = createSignal({})
   const [saveStatus, setSaveStatus] = createSignal("")
 
   // Load saved CSS when component mounts
@@ -12,27 +14,37 @@ const Options = () => {
     chrome.storage.sync.get(["customWordCSS"], (result) => {
       if (result.customWordCSS) {
         setCustomCSS(result.customWordCSS)
+        setColors(getColorsFromCSS(result.customWordCSS))
       }
     })
   })
 
-  const handleKeybindChange = (newKeybind) => {
-    console.log("New keybind:", newKeybind)
+  const handleColorChange = (className: string, newColor: string) => {
+    const newColors = { ...colors(), [className]: newColor }
+    setColors(newColors)
+    setCustomCSS(buildCSS(newColors))
   }
 
-  const handleCSSChange = (e) => {
-    setCustomCSS(e.target.value)
+  const handleCSSChange = (
+    e: Event & { currentTarget: HTMLTextAreaElement }
+  ) => {
+    const newCSS = e.currentTarget.value
+    setCustomCSS(newCSS)
+    setColors(getColorsFromCSS(newCSS))
   }
 
   const resetToDefault = () => {
+    const defaultCSS = buildCSS()
     setCustomCSS(defaultCSS)
-    saveCSS() // Also save when resetting to default
+    setColors({})
+    saveCSS(defaultCSS)
   }
 
-  const saveCSS = () => {
-    chrome.storage.sync.set({ customWordCSS: customCSS() }, () => {
+  const saveCSS = (css = customCSS()) => {
+    setSaveStatus("Saving...")
+    chrome.storage.sync.set({ customWordCSS: css }, () => {
       setSaveStatus("Saved!")
-      // Create/update style element in all tabs
+      // Update styles in all tabs
       chrome.tabs.query({}, (tabs) => {
         tabs.forEach((tab) => {
           if (tab.id) {
@@ -48,15 +60,18 @@ const Options = () => {
                   }
                   style.textContent = css
                 },
-                args: [customCSS()],
+                args: [css],
               })
               .catch(console.error)
           }
         })
       })
-      // Clear status after 2 seconds
       setTimeout(() => setSaveStatus(""), 2000)
     })
+  }
+
+  const handleKeybindChange = (newKeybind: string) => {
+    console.log("New keybind:", newKeybind)
   }
 
   return (
@@ -69,7 +84,7 @@ const Options = () => {
           <div class="flex items-center justify-between">
             <h2 class="text-2xl font-bold">Mining</h2>
             <a
-              class="pr-4 text-indigo-400"
+              class="text-center text-indigo-400"
               href="https://jpdb.io"
               target="_blank"
               rel="noopener noreferrer"
@@ -204,7 +219,30 @@ const Options = () => {
             </button>
           </div>
 
-          <h2 class="pt-6 text-2xl font-bold">Custom Word CSS</h2>
+          <h2 class="pt-6 text-2xl font-bold">Text Colors</h2>
+          <div class="grid grid-cols-2 gap-4">
+            {colorConfig.map((config) => (
+              <div class="flex items-center space-x-4">
+                <input
+                  type="color"
+                  value={colors()[config.class] || config.color}
+                  onChange={(e) =>
+                    handleColorChange(config.class, e.currentTarget.value)
+                  }
+                  class="h-8 w-12 rounded bg-transparent"
+                />
+                <label>{config.label}</label>
+                <span
+                  class="ml-2 font-bold"
+                  style={{ color: colors()[config.class] || config.color }}
+                >
+                  Sample text
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <h2 class="pt-6 text-2xl font-bold">Custom CSS</h2>
           <textarea
             class="h-96 w-full overflow-y-auto rounded-md border border-gray-800 bg-gray-600/75 px-3 py-2 font-mono text-white"
             value={customCSS()}
@@ -221,10 +259,10 @@ const Options = () => {
                 Reset to Default
               </button>
               <button
-                onClick={saveCSS}
+                onClick={() => saveCSS()}
                 class="rounded-md bg-emerald-500 px-4 py-2 text-black hover:bg-emerald-400"
               >
-                Save CSS
+                Save
               </button>
               {saveStatus() && (
                 <span class="ml-2 text-emerald-400">{saveStatus()}</span>

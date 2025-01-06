@@ -1,5 +1,5 @@
 // background/index.ts
-import { defaultCSS } from "../options/css"
+import { buildCSS } from "../options/cssConfig"
 import { fetchIchiMoe } from "./api/ichi-moe"
 import * as JpdbApi from "./api/jpdb"
 
@@ -51,12 +51,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   })
 })
 
+// Initialize default settings
+const initializeDefaultSettings = () => {
+  chrome.storage.sync.set(
+    {
+      customWordCSS: buildCSS(),
+    },
+    () => {
+      console.log("Default CSS installed")
+    }
+  )
+}
+
 // Listen for extension installation
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === "install") {
-    // Set default CSS on first installation
-    chrome.storage.sync.set({ customWordCSS: defaultCSS }, () => {
-      console.log("Default CSS installed")
-    })
+    initializeDefaultSettings()
   }
 })
