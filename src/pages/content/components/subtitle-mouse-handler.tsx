@@ -107,6 +107,32 @@ export class SubtitleMouseHandler {
     }
   }
 
+  private extractRelevantSentence(
+    text: string,
+    wordPosition: number,
+    wordLength: number
+  ): string {
+    const normalizedText = text.replace(/\n/g, " ")
+    const periods = ["。", "｡"]
+
+    // Find closest period after word (or end of string)
+    const endPosition = periods
+      .map((p) => normalizedText.indexOf(p, wordPosition + wordLength))
+      .filter((pos) => pos !== -1)
+      .reduce(
+        (closest, pos) =>
+          closest === -1 ? pos + 1 : Math.min(closest, pos + 1),
+        normalizedText.length
+      )
+
+    // Find furthest period before word (or start of string)
+    const startPosition = periods
+      .map((p) => normalizedText.lastIndexOf(p, wordPosition))
+      .reduce((furthest, pos) => Math.max(furthest, pos + 1), 0)
+
+    return normalizedText.substring(startPosition, endPosition).trim()
+  }
+
   private processSegment(segment: HTMLElement): void {
     if (segment === this.activeSegment) return
 
@@ -146,8 +172,19 @@ export class SubtitleMouseHandler {
       segment.appendChild(container)
 
       this.activeSegment = segment
+      const relevantSentence = this.extractRelevantSentence(
+        subtitleText,
+        matchingVocab.position,
+        matchingVocab.length
+      )
+
       this.dispose = render(
-        () => <VocabularyTooltip vocabulary={matchingVocab} />,
+        () => (
+          <VocabularyTooltip
+            vocabulary={matchingVocab}
+            sentence={relevantSentence}
+          />
+        ),
         container
       )
     }

@@ -137,6 +137,13 @@ export async function getUserDecks() {
   })
 }
 
+export async function getEnglishTranslation(text: string) {
+  // console.log("getEnglishTranslation", text)
+  return makeRequest("ja2en", {
+    text: text,
+  })
+}
+
 export async function setSentence(
   vid: number,
   sid: number,
@@ -146,6 +153,7 @@ export async function setSentence(
   const body: any = { vid, sid }
   if (sentence) body.sentence = sentence
   if (translation) body.translation = translation
+  // console.log("setSentence", body)
 
   return makeRequest("set-card-sentence", body)
 }
