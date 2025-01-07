@@ -149,7 +149,7 @@ export default function VocabularyTooltip(props: {
   }
 
   return (
-    <div class="absolute -top-20 left-1/2 z-50 flex w-80 -translate-x-1/2 -translate-y-full flex-col justify-between overflow-x-hidden rounded-md bg-black/95 text-start text-base text-white shadow-lg hover:cursor-default">
+    <div class="absolute -top-20 left-1/2 z-50 flex w-80 -translate-x-1/2 -translate-y-full flex-col justify-between overflow-x-hidden rounded-md bg-black/95 text-start text-base text-white shadow-lg [text-shadow:none] hover:cursor-default">
       <div class="max-h-80 overflow-y-auto p-4">
         <div class="mb-2 flex justify-between">
           <div class="text-start">

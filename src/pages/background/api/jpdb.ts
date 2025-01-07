@@ -42,7 +42,6 @@ async function makeRequest(endpoint: string, body: any) {
     },
     body: JSON.stringify(body),
   })
-  console.log("body: ", body)
 
   if (!response.ok) {
     throw await handleJpdbError(response)
@@ -76,7 +75,6 @@ export async function parseText(text: string) {
 }
 
 export async function parseTextBatch(texts: string[]) {
-  console.log("Sending to jpdb...")
   return makeRequest("parse", {
     text: texts,
     token_fields: ["vocabulary_index", "position", "length", "furigana"],
@@ -96,7 +94,6 @@ export async function parseTextBatch(texts: string[]) {
 }
 
 export async function fetchCardStates(texts: string) {
-  console.log("sending: ", texts)
   return makeRequest("parse", {
     text: texts,
     token_fields: ["vocabulary_index", "position", "length"],
@@ -110,7 +107,6 @@ export async function addToDeck(
   sid: number,
   deckId: number | "blacklist" | "never-forget"
 ) {
-  console.log("Adding to deck", vid, sid, deckId)
   return makeRequest("deck/add-vocabulary", {
     id: deckId,
     vocabulary: [[vid, sid]],
