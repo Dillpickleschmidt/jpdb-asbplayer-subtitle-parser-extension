@@ -42,6 +42,7 @@ async function makeRequest(endpoint: string, body: any) {
     },
     body: JSON.stringify(body),
   })
+  console.log("body: ", body)
 
   if (!response.ok) {
     throw await handleJpdbError(response)
@@ -109,6 +110,7 @@ export async function addToDeck(
   sid: number,
   deckId: number | "blacklist" | "never-forget"
 ) {
+  console.log("Adding to deck", vid, sid, deckId)
   return makeRequest("deck/add-vocabulary", {
     id: deckId,
     vocabulary: [[vid, sid]],
@@ -123,6 +125,19 @@ export async function removeFromDeck(
   return makeRequest("deck/remove-vocabulary", {
     id: deckId,
     vocabulary: [[vid, sid]],
+  })
+}
+
+export async function getUserDecks() {
+  return makeRequest("list-user-decks", {
+    fields: [
+      "id",
+      "name",
+      "word_count",
+      "vocabulary_known_coverage",
+      "vocabulary_in_progress_coverage",
+      "is_built_in",
+    ],
   })
 }
 

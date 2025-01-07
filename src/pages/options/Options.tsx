@@ -1,14 +1,28 @@
 // Options.tsx
 import "@src/styles/index.css"
 import { DEFAULT_SETTINGS } from "@src/types"
-import { createEffect, createSignal } from "solid-js"
+import { createEffect, createSignal, For } from "solid-js"
+import { ChromeMessage, RawJpdbUserDecksResponse } from "../content/types"
 import KeybindCapture from "./components/KeybindCapture"
 import { buildCSS, colorConfig, getColorsFromCSS } from "./cssConfig"
 
 type KeybindType = keyof typeof DEFAULT_SETTINGS.keybinds
 type TooltipButtonType = keyof typeof DEFAULT_SETTINGS.tooltipButtons.enabled
 
-const Options = () => {
+const fetchUserDecks = async (): Promise<RawJpdbUserDecksResponse> => {
+  const response = (await chrome.runtime.sendMessage({
+    type: "JPDB_getUserDecks",
+    args: {
+      params: [], // getUserDecks doesn't take any parameters
+    },
+  })) as ChromeMessage<RawJpdbUserDecksResponse>
+
+  if (!response.success) throw new Error(response.error)
+
+  return response.data
+}
+
+export default function Options() {
   const [customCSS, setCustomCSS] = createSignal(buildCSS())
   const [colors, setColors] = createSignal({})
   const [saveStatus, setSaveStatus] = createSignal("")
@@ -16,6 +30,10 @@ const Options = () => {
   const [tooltipButtons, setTooltipButtons] = createSignal(
     DEFAULT_SETTINGS.tooltipButtons
   )
+  const [userDecks, setUserDecks] =
+    createSignal<RawJpdbUserDecksResponse | null>(null)
+  const [error, setError] = createSignal<string | null>(null)
+  const [selectedDecks, setSelectedDecks] = createSignal<number[]>([])
 
   // Load saved settings when component mounts
   createEffect(() => {
@@ -35,6 +53,41 @@ const Options = () => {
       }
     )
   })
+
+  // Fetch user decks when the component mounts
+  createEffect(() => {
+    ;(async () => {
+      try {
+        const decks = await fetchUserDecks()
+        setUserDecks(decks)
+        console.log("User decks:", decks)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unknown error")
+        console.error("Failed to fetch user decks:", err)
+      }
+    })().then(() => chrome.storage.sync.set({ userDecks: userDecks() }))
+  })
+
+  // Load selected decks on component mount
+  createEffect(() => {
+    chrome.storage.sync.get("selectedDecks", (result) => {
+      if (result.selectedDecks) {
+        setSelectedDecks(result.selectedDecks)
+      }
+    })
+  })
+
+  const handleDeckSelection = (deckId: number, isSelected: boolean) => {
+    const updatedDecks = isSelected
+      ? [...selectedDecks(), deckId]
+      : selectedDecks().filter((id) => id !== deckId)
+
+    setSelectedDecks(updatedDecks)
+
+    chrome.storage.sync.set({ selectedDecks: updatedDecks }, () => {
+      console.log("Selected decks updated:", updatedDecks)
+    })
+  }
 
   const handleColorChange = (className: string, newColor: string) => {
     const newColors = { ...colors(), [className]: newColor }
@@ -161,7 +214,69 @@ const Options = () => {
           <h1 class="mt-32 pb-6 text-center text-5xl font-bold">
             JPDB Subtitle Parser Settings
           </h1>
-          <div class="flex items-center justify-between">
+
+          <div>
+            <h2 class="text-2xl font-bold">Decks</h2>
+            <h3 class="mt-4">
+              Select the decks you want to appear in the tooltip's quick deck
+              selector.
+            </h3>
+          </div>
+          <div class="mt-6 max-h-[600px] overflow-y-auto">
+            {userDecks() ? (
+              <table class="w-full text-left text-sm text-gray-300">
+                <thead class="sticky top-0 bg-gray-700 text-gray-100">
+                  <tr>
+                    <th class="px-4 py-2">Select</th>
+                    <th class="px-4 py-2">Name</th>
+                    <th class="px-4 py-2">Word Count</th>
+                    <th class="px-4 py-2">Known (%)</th>
+                    <th class="px-4 py-2">In-Progress (%)</th>
+                    <th class="px-4 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <For each={userDecks()?.decks.sort((a, b) => a[0] - b[0])}>
+                    {(deck) => (
+                      <tr class="border-b border-gray-600 hover:bg-gray-700">
+                        <td class="space-x-1 px-4 py-2">
+                          <input
+                            type="checkbox"
+                            id={`deck-${deck[0]}`}
+                            checked={selectedDecks().includes(deck[0])}
+                            onChange={(e) =>
+                              handleDeckSelection(
+                                deck[0],
+                                e.currentTarget.checked
+                              )
+                            }
+                          />
+                          <label for={`deck-${deck[0]}`}>{deck[0]}</label>
+                        </td>
+                        <td class="px-4 py-2">{deck[1]}</td> {/* name */}
+                        <td class="px-4 py-2">{deck[2]}</td> {/* word_count */}
+                        <td class="px-4 py-2">
+                          {(deck[3] as number)?.toFixed(2)}%
+                        </td>
+                        <td class="px-4 py-2">
+                          {(deck[4] as number)?.toFixed(2)}%
+                        </td>
+                        <td class="text-nowrap px-4 py-2 text-center">
+                          {deck[5] ? "Built-in" : ""}
+                        </td>
+                      </tr>
+                    )}
+                  </For>
+                </tbody>
+              </table>
+            ) : error() ? (
+              <p class="text-red-500">Error: {error()}</p>
+            ) : (
+              <p>Loading decks...</p>
+            )}
+          </div>
+
+          <div class="flex items-center justify-between pt-6">
             <h2 class="text-2xl font-bold">Mining</h2>
             <a
               class="text-center text-indigo-400"
@@ -173,19 +288,28 @@ const Options = () => {
             </a>
           </div>
           <div class="grid w-full grid-cols-6 items-center gap-6">
-            <label class="col-start-1 col-end-3">Standard deck to add to</label>
-            <input class="col-start-3 col-end-6 rounded-md border-2 border-red-500 bg-gray-700 px-3 py-2 text-white" />
+            <label class="col-start-1 col-end-3 leading-6">
+              Default number of sentences <strong>before</strong> (for
+              additional context)
+            </label>
+            <input
+              type="number"
+              value={0}
+              min={0}
+              class="col-start-3 col-end-6 rounded-md border-2 border-gray-600 bg-gray-700 px-3 py-2 text-white"
+            />
             <button class="col-start-6 h-full rounded-md bg-emerald-400/50 text-black hover:bg-emerald-500">
               Default
             </button>
 
             <label class="col-start-1 col-end-3">
-              Number of context sentences
+              Default number of sentences <strong>after</strong> (for additional
+              context)
             </label>
             <input
               type="number"
-              value={1}
-              min={1}
+              value={0}
+              min={0}
               class="col-start-3 col-end-6 rounded-md border-2 border-gray-600 bg-gray-700 px-3 py-2 text-white"
             />
             <button class="col-start-6 h-full rounded-md bg-emerald-400/50 text-black hover:bg-emerald-500">
@@ -422,7 +546,7 @@ const Options = () => {
                 />
                 <label>{config.label}</label>
                 <span
-                  class="ml-2 font-bold"
+                  class="cr-subtitle ml-2 font-bold"
                   style={{ color: colors()[config.class] || config.color }}
                 >
                   Sample text
@@ -463,5 +587,3 @@ const Options = () => {
     </div>
   )
 }
-
-export default Options

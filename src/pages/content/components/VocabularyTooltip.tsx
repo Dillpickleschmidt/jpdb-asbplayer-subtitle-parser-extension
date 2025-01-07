@@ -1,6 +1,7 @@
 // VocabularyTooltip.tsx
 import { DEFAULT_SETTINGS, TooltipButtons } from "@src/types"
 import { For, Show, createEffect, createSignal } from "solid-js"
+import type { ChromeMessage, RawJpdbBatchProcessingResult } from "../types"
 import { getCardStateClass } from "../utils/card-state"
 
 type VocabularyEntry = {
@@ -17,7 +18,6 @@ type VocabularyEntry = {
 
 // Helper to get the appropriate class for a card state
 const getStateClassName = (cardState: string) => {
-  // Use the same mapping as in updateSubtitleDisplay
   let state = cardState
   if (
     cardState === "redundant" &&
@@ -29,40 +29,124 @@ const getStateClassName = (cardState: string) => {
   return getCardStateClass(state)
 }
 
+async function addToDeck(
+  vid: number,
+  sid: number,
+  deckId: number
+): Promise<RawJpdbBatchProcessingResult> {
+  const response = (await chrome.runtime.sendMessage({
+    type: "JPDB_addToDeck",
+    args: {
+      type: "add",
+      params: [vid, sid, deckId],
+    },
+  })) as ChromeMessage<RawJpdbBatchProcessingResult>
+
+  if (!response.success) throw new Error(response.error)
+
+  return response.data
+}
+
 export default function VocabularyTooltip(props: {
   vocabulary: VocabularyEntry
 }) {
+  const [selectedDecks, setSelectedDecks] = createSignal<number[]>([])
+  const [decks, setDecks] = createSignal<{ id: number; name: string }[]>([])
+  const [currentDeck, setCurrentDeck] = createSignal<string>("")
   const [tooltipButtons, setTooltipButtons] = createSignal<TooltipButtons>(
     DEFAULT_SETTINGS.tooltipButtons
   )
+  const [isAdding, setIsAdding] = createSignal(false)
 
-  // Load tooltip button settings when component mounts and listen for changes
+  // Load selected decks and filtered deck data
   createEffect(() => {
-    // Initial load
-    chrome.storage.sync.get(["tooltipButtons"], (result) => {
-      if (result.tooltipButtons) {
-        setTooltipButtons(result.tooltipButtons)
-      }
-    })
+    chrome.storage.sync.get(
+      ["selectedDecks", "userDecks", "tooltipSelectedDeck"],
+      (result) => {
+        const selectedIds = result.selectedDecks || []
+        setSelectedDecks(selectedIds)
 
-    // Listen for changes
+        const userDecks = result.userDecks?.decks || []
+        const filteredDecks = userDecks
+          .filter((deck: number[]) => selectedIds.includes(deck[0]))
+          .map((deck: number[]) => ({ id: deck[0], name: deck[1] }))
+        setDecks(filteredDecks)
+
+        if (result.tooltipSelectedDeck) {
+          setCurrentDeck(result.tooltipSelectedDeck)
+        }
+      }
+    )
+
+    // Listen for changes in Chrome storage
     const storageListener = (
       changes: { [key: string]: chrome.storage.StorageChange },
       namespace: string
     ) => {
-      if (namespace === "sync" && changes.tooltipButtons) {
-        setTooltipButtons(changes.tooltipButtons.newValue)
+      if (namespace === "sync") {
+        if (changes.selectedDecks) {
+          const updatedSelectedDecks = changes.selectedDecks.newValue || []
+          setSelectedDecks(updatedSelectedDecks)
+
+          chrome.storage.sync.get(["userDecks"], (result) => {
+            const userDecks = result.userDecks?.decks || []
+            const filteredDecks = userDecks
+              .filter((deck: number[]) =>
+                updatedSelectedDecks.includes(deck[0])
+              )
+              .map((deck: number[]) => ({ id: deck[0], name: deck[1] }))
+            setDecks(filteredDecks)
+
+            if (
+              !filteredDecks.some((deck) => String(deck.id) === currentDeck())
+            ) {
+              setCurrentDeck("")
+              chrome.storage.sync.set({ tooltipSelectedDeck: "" })
+            }
+          })
+        }
       }
     }
 
-    // Add listener
     chrome.storage.onChanged.addListener(storageListener)
 
-    // Cleanup listener when component unmounts
     return () => {
       chrome.storage.onChanged.removeListener(storageListener)
     }
   })
+
+  const handleDeckChange = (
+    e: Event & { currentTarget: HTMLSelectElement }
+  ) => {
+    const selectedDeckId = e.currentTarget.value
+    setCurrentDeck(selectedDeckId)
+
+    chrome.storage.sync.set({ tooltipSelectedDeck: selectedDeckId })
+  }
+
+  const handleAddToDeck = async () => {
+    const selectedDeckId = parseInt(currentDeck())
+    if (!selectedDeckId) {
+      alert("Please select a deck first")
+      return
+    }
+
+    try {
+      setIsAdding(true)
+      await addToDeck(
+        props.vocabulary.vid,
+        props.vocabulary.sid,
+        selectedDeckId
+      )
+      // Optionally update the UI to show success
+      alert("Word successfully added to deck!")
+    } catch (error) {
+      console.error("Error adding word to deck:", error)
+      alert("Failed to add word to deck. Please try again.")
+    } finally {
+      setIsAdding(false)
+    }
+  }
 
   return (
     <div class="absolute -top-20 left-1/2 z-50 flex w-80 -translate-x-1/2 -translate-y-full flex-col justify-between overflow-x-hidden rounded-md bg-black/95 text-start text-base text-white shadow-lg hover:cursor-default">
@@ -84,13 +168,15 @@ export default function VocabularyTooltip(props: {
               name="decks"
               id="deck-select"
               class="max-w-24 bg-black text-right"
+              value={currentDeck()}
+              onChange={handleDeckChange}
             >
               <option value="">Sel. Deck</option>
-              <option value="deck-1">Deck 1</option>
-              <option value="deck-2">Deck 2</option>
-              <option value="deck-3">Deck 3</option>
-              <option value="deck-4">Deck 4</option>
-              <option value="deck-5">Deck 5</option>
+              <For each={decks()}>
+                {(deck) => (
+                  <option value={deck.id}>{`${deck.id} - ${deck.name}`}</option>
+                )}
+              </For>
             </select>
             <div class="cursor-text text-right text-xs font-normal italic opacity-70">
               Rank #{props.vocabulary.frequencyRank}
@@ -175,8 +261,10 @@ export default function VocabularyTooltip(props: {
           <button
             class="h-8 rounded-md border border-black px-1 text-black"
             style={{ "background-color": tooltipButtons().colors.add }}
+            onClick={handleAddToDeck}
+            disabled={isAdding() || !currentDeck()}
           >
-            Add
+            {isAdding() ? "..." : "Add"}
           </button>
         </Show>
         <Show when={tooltipButtons().enabled.addEdit}>

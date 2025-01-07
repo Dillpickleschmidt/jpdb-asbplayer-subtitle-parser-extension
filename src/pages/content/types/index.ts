@@ -11,6 +11,20 @@ type RawJpdbVocabularyArray = [
   partOfSpeech: string[],
 ]
 
+export type RawJpdbUserDecksResponse = {
+  decks: [
+    [
+      // Array of arrays
+      id: number,
+      name: string,
+      word_count: number,
+      vocabulary_known_coverage: number,
+      vocabulary_in_progress_coverage: number,
+      is_built_in: boolean,
+    ],
+  ]
+}
+
 type RawJpdbToken = [
   vocabularyIndex: number,
   position: number,

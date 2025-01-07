@@ -6,7 +6,9 @@ export class JpdbProcessor {
   ): Promise<RawJpdbBatchProcessingResult> {
     const response = (await chrome.runtime.sendMessage({
       type: "JPDB_parseTextBatch",
-      args: texts,
+      args: {
+        params: [texts],
+      },
     })) as ChromeMessage<RawJpdbBatchProcessingResult>
 
     if (!response.success) throw new Error(response.error)
