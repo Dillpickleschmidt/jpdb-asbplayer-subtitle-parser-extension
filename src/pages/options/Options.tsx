@@ -207,6 +207,16 @@ export default function Options() {
     saveKeybinds(newKeybinds)
   }
 
+  const initializeDefaultSettings = async () => {
+    const response = (await chrome.runtime.sendMessage({
+      type: "INITIALIZE_DEFAULT_SETTINGS",
+    })) as ChromeMessage
+
+    if (!response.success) throw new Error(response.error)
+
+    return response.data
+  }
+
   return (
     <div>
       <header class="flex min-h-screen flex-col items-center bg-[#282c34] text-lg text-white">
@@ -217,9 +227,15 @@ export default function Options() {
 
           <div class="flex w-full justify-center">
             <button
-              onClick={() =>
-                chrome.storage.sync.clear().then(() => window.location.reload())
-              }
+              onClick={async () => {
+                try {
+                  await chrome.storage.sync.clear()
+                  await initializeDefaultSettings()
+                  window.location.reload()
+                } catch (error) {
+                  console.error("Failed to reset all settings:", error)
+                }
+              }}
               title="Refresh other tabs to see changes"
               class="rounded-md bg-red-400 px-4 py-2 font-medium text-black hover:bg-red-300"
             >

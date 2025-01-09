@@ -48,6 +48,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
   }
 
+  if (request.type === "INITIALIZE_DEFAULT_SETTINGS") {
+    initializeDefaultSettings()
+    sendResponse({ success: true })
+    return true
+  }
+
   console.error("Unrecognized request type:", request.type)
   sendResponse({
     success: false,
