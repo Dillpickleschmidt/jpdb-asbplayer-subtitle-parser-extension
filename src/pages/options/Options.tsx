@@ -276,7 +276,7 @@ export default function Options() {
             )}
           </div>
 
-          <div class="flex items-center justify-between pt-6">
+          {/* <div class="flex items-center justify-between pt-6">
             <h2 class="text-2xl font-bold">Mining</h2>
             <a
               class="text-center text-indigo-400"
@@ -315,7 +315,7 @@ export default function Options() {
             <button class="col-start-6 h-full rounded-md bg-emerald-400/50 text-black hover:bg-emerald-500">
               Default
             </button>
-          </div>
+          </div> */}
 
           <h2 class="pt-6 text-2xl font-bold">Keybinds</h2>
           <div class="grid w-full grid-cols-6 items-center gap-6">

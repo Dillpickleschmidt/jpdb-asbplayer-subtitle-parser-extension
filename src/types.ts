@@ -116,7 +116,8 @@ export const DEFAULT_SETTINGS = {
       hard: false,
       okay: true,
       easy: false,
-      blacklist: true,
+      never_forget: true,
+      blacklist: false,
       add: true,
       addEdit: true,
     },
@@ -126,19 +127,21 @@ export const DEFAULT_SETTINGS = {
       hard: "#38bdf8", // amber
       okay: "#38bdf8", // cyan
       easy: "#9370db", // purple
+      never_forget: "#ff4500", // orange
       blacklist: "#b0b0b0", // gray
       add: "#22c55e", // green
       addEdit: "#ef4444", // red
     },
     labels: {
-      nothing: "Nothing",
-      something: "Something",
+      nothing: "Noth.",
+      something: "Somth.",
       hard: "Hard",
       okay: "Okay",
       easy: "Easy",
+      never_forget: "Never F.",
       blacklist: "Blacklist",
       add: "Add",
-      addEdit: "Add + Edit",
+      addEdit: "Add+",
     },
   },
   subtitleColors: {

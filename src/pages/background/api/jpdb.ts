@@ -159,23 +159,11 @@ export async function setSentence(
 }
 
 export async function review(vid: number, sid: number, rating: string) {
-  const REVIEW_GRADES = {
-    nothing: "1",
-    something: "2",
-    hard: "3",
-    good: "4",
-    easy: "5",
-    pass: "p",
-    fail: "f",
-    known: "k",
-    unknown: "n",
-    never_forget: "w",
-    blacklist: "-1",
-  }
+  // console.log("review", vid, sid, rating)
 
   return makeRequest("review", {
     vid,
     sid,
-    grade: REVIEW_GRADES[rating] || rating,
+    grade: rating,
   })
 }

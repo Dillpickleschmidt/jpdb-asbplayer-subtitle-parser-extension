@@ -1,20 +1,17 @@
 // VocabularyTooltip.tsx
-import { DEFAULT_SETTINGS, TooltipButtons } from "@src/types"
 import { For, Show, createEffect, createSignal } from "solid-js"
-import type { ChromeMessage, RawJpdbBatchProcessingResult } from "../types"
+import { useDeckSelection } from "../hooks/useDeckSelection"
+import { useTranslationInput } from "../hooks/useTranslationInput"
+import { addToDeck, getTranslation, reviewWord } from "../services/jpdb-api"
+import type { VocabularyEntry } from "../types"
 import { getCardStateClass } from "../utils/card-state"
+import { ReviewButton } from "./ReviewButton"
+import { TranslationInput } from "./TranslationInput"
 
-type VocabularyEntry = {
-  vid: number
-  sid: number
-  rid: number
-  spelling: string
-  reading: string
-  frequencyRank: number
-  meanings: string[]
-  partOfSpeech: string[]
-  cardState: string[] | null
-}
+const SPECIAL_DECKS = {
+  BLACKLIST: 1879048194,
+  NEVER_FORGET: 1879048193,
+} as const
 
 // Helper to get the appropriate class for a card state
 const getStateClassName = (cardState: string) => {
@@ -29,148 +26,48 @@ const getStateClassName = (cardState: string) => {
   return getCardStateClass(state)
 }
 
-async function getTranslation(text: string): Promise<string> {
-  const response = await chrome.runtime.sendMessage({
-    type: "JPDB_getEnglishTranslation",
-    args: {
-      params: [text],
-    },
-  })
-
-  if (!response.success) throw new Error(response.error)
-  return response.data.text
-}
-
-async function addToDeck(
-  vid: number,
-  sid: number,
-  deckId: number,
-  sentence: string,
-  translation?: string
-): Promise<void> {
-  // First add to deck
-  const response = (await chrome.runtime.sendMessage({
-    type: "JPDB_addToDeck",
-    args: {
-      params: [vid, sid, deckId],
-    },
-  })) as ChromeMessage<RawJpdbBatchProcessingResult>
-
-  if (!response.success) throw new Error(response.error)
-
-  // Get machine translation if not provided
-  const finalTranslation = translation || (await getTranslation(sentence))
-
-  // Then set the sentence with translation
-  const setSentenceResponse = await chrome.runtime.sendMessage({
-    type: "JPDB_setSentence",
-    args: {
-      params: [vid, sid, sentence, finalTranslation],
-    },
-  })
-
-  if (!setSentenceResponse.success) throw new Error(setSentenceResponse.error)
-}
-
 export default function VocabularyTooltip(props: {
   vocabulary: VocabularyEntry
   sentence: string
 }) {
-  const [selectedDecks, setSelectedDecks] = createSignal<number[]>([])
-  const [decks, setDecks] = createSignal<{ id: number; name: string }[]>([])
-  const [currentDeck, setCurrentDeck] = createSignal<string>("")
-  const [tooltipButtons, setTooltipButtons] = createSignal<TooltipButtons>(
-    DEFAULT_SETTINGS.tooltipButtons
-  )
   const [isAdding, setIsAdding] = createSignal(false)
-  const [showTranslation, setShowTranslation] = createSignal(false)
-  const [translation, setTranslation] = createSignal("")
-  let inputRef: HTMLInputElement | undefined = undefined
-  const [isTranslating, setIsTranslating] = createSignal(false)
+  const { decks, currentDeck, tooltipButtons, handleDeckChange } =
+    useDeckSelection()
 
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (showTranslation()) {
-      e.stopPropagation()
-      if (e.key === "Escape") {
-        setShowTranslation(false)
-        setTranslation("")
-      } else if (e.key === "Enter") {
-        handleAddToDeckPlus()
-      }
+  const translation = useTranslationInput(async () => {
+    await handleAddToDeckPlus()
+  })
+
+  createEffect(() => {
+    if (translation.showTranslation()) {
+      document.addEventListener("keydown", translation.handleKeyDown, true)
+      return () =>
+        document.removeEventListener("keydown", translation.handleKeyDown, true)
+    }
+  })
+
+  const handleReview = async (rating: string) => {
+    try {
+      setIsAdding(true)
+      await reviewWord(props.vocabulary.vid, props.vocabulary.sid, rating)
+    } catch (error) {
+      console.error("Error reviewing word:", error)
+      alert("Failed to review word. Please try again.")
+    } finally {
+      setIsAdding(false)
     }
   }
 
-  // Load selected decks and filtered deck data
-  createEffect(() => {
-    chrome.storage.sync.get(
-      ["selectedDecks", "userDecks", "tooltipSelectedDeck"],
-      (result) => {
-        const selectedIds = result.selectedDecks || []
-        setSelectedDecks(selectedIds)
-
-        const userDecks = result.userDecks?.decks || []
-        const filteredDecks = userDecks
-          .filter((deck: number[]) => selectedIds.includes(deck[0]))
-          .map((deck: number[]) => ({ id: deck[0], name: deck[1] }))
-        setDecks(filteredDecks)
-
-        if (result.tooltipSelectedDeck) {
-          setCurrentDeck(result.tooltipSelectedDeck)
-        }
-      }
-    )
-
-    // Listen for changes in Chrome storage
-    const storageListener = (
-      changes: { [key: string]: chrome.storage.StorageChange },
-      namespace: string
-    ) => {
-      if (namespace === "sync") {
-        if (changes.selectedDecks) {
-          const updatedSelectedDecks = changes.selectedDecks.newValue || []
-          setSelectedDecks(updatedSelectedDecks)
-
-          chrome.storage.sync.get(["userDecks"], (result) => {
-            const userDecks = result.userDecks?.decks || []
-            const filteredDecks = userDecks
-              .filter((deck: number[]) =>
-                updatedSelectedDecks.includes(deck[0])
-              )
-              .map((deck: number[]) => ({ id: deck[0], name: deck[1] }))
-            setDecks(filteredDecks)
-
-            if (
-              !filteredDecks.some((deck) => String(deck.id) === currentDeck())
-            ) {
-              setCurrentDeck("")
-              chrome.storage.sync.set({ tooltipSelectedDeck: "" })
-            }
-          })
-        }
-      }
+  const handleSpecialDeck = async (deckId: number) => {
+    try {
+      setIsAdding(true)
+      await addToDeck(props.vocabulary.vid, props.vocabulary.sid, deckId)
+    } catch (error) {
+      console.error("Error adding word to special deck:", error)
+      alert("Failed to add word. Please try again.")
+    } finally {
+      setIsAdding(false)
     }
-
-    chrome.storage.onChanged.addListener(storageListener)
-
-    return () => {
-      chrome.storage.onChanged.removeListener(storageListener)
-    }
-  })
-
-  createEffect(() => {
-    if (showTranslation()) {
-      document.addEventListener("keydown", handleKeyDown, true)
-      return () => document.removeEventListener("keydown", handleKeyDown, true)
-    }
-  })
-
-  const handleDeckChange = (
-    e: Event & { currentTarget: HTMLSelectElement }
-  ) => {
-    const selectedDeckId = e.currentTarget.value
-    setCurrentDeck(selectedDeckId)
-
-    chrome.storage.sync.set({ tooltipSelectedDeck: selectedDeckId })
   }
 
   const handleAddToDeck = async () => {
@@ -204,22 +101,8 @@ export default function VocabularyTooltip(props: {
       return
     }
 
-    if (!showTranslation()) {
-      setShowTranslation(true)
-      setIsTranslating(true)
-
-      // Get machine translation and prefill
-      try {
-        const machineTranslation = await getTranslation(props.sentence)
-        setTranslation(machineTranslation)
-      } catch (error) {
-        console.error("Error getting machine translation:", error)
-        // Continue anyway, user can still type translation manually
-      } finally {
-        setIsTranslating(false)
-      }
-
-      setTimeout(() => inputRef?.focus(), 0)
+    if (!translation.showTranslation()) {
+      translation.startTranslation(async () => getTranslation(props.sentence))
       return
     }
 
@@ -230,11 +113,10 @@ export default function VocabularyTooltip(props: {
         props.vocabulary.sid,
         selectedDeckId,
         props.sentence,
-        translation()
+        translation.translation()
       )
       alert("Word successfully added to deck!")
-      setShowTranslation(false)
-      setTranslation("")
+      translation.reset()
     } catch (error) {
       console.error("Error adding word to deck:", error)
       alert("Failed to add word to deck. Please try again.")
@@ -246,6 +128,7 @@ export default function VocabularyTooltip(props: {
   return (
     <>
       <div class="absolute -top-20 left-1/2 z-50 flex w-80 -translate-x-1/2 -translate-y-full flex-col justify-between overflow-x-hidden rounded-md bg-black/95 text-start text-base text-white shadow-lg [text-shadow:none] hover:cursor-default">
+        {/* Main content section */}
         <div class="max-h-80 overflow-y-auto p-4">
           <div class="mb-2 flex justify-between">
             <div class="text-start">
@@ -285,7 +168,9 @@ export default function VocabularyTooltip(props: {
                 <For each={props.vocabulary.cardState}>
                   {(cardState) => (
                     <div
-                      class={`cursor-text text-end italic leading-5 ${getStateClassName(cardState)}`}
+                      class={`cursor-text text-end italic leading-5 ${getStateClassName(
+                        cardState
+                      )}`}
                     >
                       {cardState}
                     </div>
@@ -305,99 +190,104 @@ export default function VocabularyTooltip(props: {
             </For>
           </div>
         </div>
+
+        {/* Buttons section */}
         <div class="grid w-full grid-cols-4 gap-1 px-3 pb-3 pt-1">
           {/* First Row */}
           <Show when={tooltipButtons().enabled.nothing}>
-            <button
-              class="h-8 rounded-md border border-black px-1 text-black"
-              style={{ "background-color": tooltipButtons().colors.nothing }}
-            >
-              Noth.
-            </button>
+            <ReviewButton
+              label="Noth."
+              color={tooltipButtons().colors.nothing}
+              onClick={() => handleReview("nothing")}
+              disabled={isAdding()}
+              loading={isAdding()}
+            />
           </Show>
           <Show when={tooltipButtons().enabled.something}>
-            <button
-              class="h-8 rounded-md border border-black px-1 text-black"
-              style={{ "background-color": tooltipButtons().colors.something }}
-            >
-              Somth.
-            </button>
+            <ReviewButton
+              label="Somth."
+              color={tooltipButtons().colors.something}
+              onClick={() => handleReview("something")}
+              disabled={isAdding()}
+              loading={isAdding()}
+            />
           </Show>
           <Show when={tooltipButtons().enabled.hard}>
-            <button
-              class="h-8 rounded-md border border-black px-1 text-black"
-              style={{ "background-color": tooltipButtons().colors.hard }}
-            >
-              Hard
-            </button>
+            <ReviewButton
+              label="Hard"
+              color={tooltipButtons().colors.hard}
+              onClick={() => handleReview("hard")}
+              disabled={isAdding()}
+              loading={isAdding()}
+            />
           </Show>
           <Show when={tooltipButtons().enabled.okay}>
-            <button
-              class="h-8 rounded-md border border-black px-1 text-black"
-              style={{ "background-color": tooltipButtons().colors.okay }}
-            >
-              Okay
-            </button>
+            <ReviewButton
+              label="Okay"
+              color={tooltipButtons().colors.okay}
+              onClick={() => handleReview("okay")}
+              disabled={isAdding()}
+              loading={isAdding()}
+            />
           </Show>
 
           {/* Second Row */}
           <Show when={tooltipButtons().enabled.easy}>
-            <button
-              class="h-8 rounded-md border border-black px-1 text-black"
-              style={{ "background-color": tooltipButtons().colors.easy }}
-            >
-              Easy
-            </button>
+            <ReviewButton
+              label="Easy"
+              color={tooltipButtons().colors.easy}
+              onClick={() => handleReview("easy")}
+              disabled={isAdding()}
+              loading={isAdding()}
+            />
           </Show>
           <Show when={tooltipButtons().enabled.blacklist}>
-            <button
-              class="h-8 rounded-md border border-black px-1 text-black"
-              style={{ "background-color": tooltipButtons().colors.blacklist }}
-            >
-              Blackl.
-            </button>
+            <ReviewButton
+              label="Blackl."
+              color={tooltipButtons().colors.blacklist}
+              onClick={() => handleSpecialDeck(SPECIAL_DECKS.BLACKLIST)}
+              disabled={isAdding()}
+              loading={isAdding()}
+            />
+          </Show>
+          <Show when={tooltipButtons().enabled.never_forget}>
+            <ReviewButton
+              label="Never F."
+              color={tooltipButtons().colors.never_forget}
+              onClick={() => handleSpecialDeck(SPECIAL_DECKS.NEVER_FORGET)}
+              disabled={isAdding()}
+              loading={isAdding()}
+            />
           </Show>
           <Show when={tooltipButtons().enabled.add}>
-            <button
-              class="h-8 rounded-md border border-black px-1 text-black"
-              style={{ "background-color": tooltipButtons().colors.add }}
+            <ReviewButton
+              label="Add"
+              color={tooltipButtons().colors.add}
               onClick={handleAddToDeck}
               disabled={isAdding() || !currentDeck()}
-            >
-              {isAdding() ? "..." : "Add"}
-            </button>
+              loading={isAdding()}
+            />
           </Show>
           <Show when={tooltipButtons().enabled.addEdit}>
-            <button
-              class="h-8 rounded-md border border-black px-1 text-black"
-              style={{ "background-color": tooltipButtons().colors.addEdit }}
+            <ReviewButton
+              label="Add+"
+              color={tooltipButtons().colors.addEdit}
               onClick={handleAddToDeckPlus}
               disabled={isAdding() || !currentDeck()}
-            >
-              {isAdding() ? "..." : "Add+"}
-            </button>
+              loading={isAdding()}
+            />
           </Show>
         </div>
       </div>
 
-      {/* Translation Input */}
-      <Show when={showTranslation()}>
-        <div class="fixed left-0 top-[-15rem] z-[2000] w-full space-y-2 rounded-lg bg-black/95 px-6 pb-6 pt-5 text-start text-xl font-normal text-white [text-shadow:none]">
-          <label>Write the English translation here:</label>
-          <input
-            ref={(el) => (inputRef = el)}
-            value={translation()}
-            onInput={(e) => setTranslation(e.currentTarget.value)}
-            class="w-full rounded-md border-2 border-neutral-700/75 bg-neutral-800/75 px-3 py-2 text-white"
-            placeholder={
-              isTranslating()
-                ? "Loading translation..."
-                : "Type translation and press Enter"
-            }
-            disabled={isTranslating()}
-          />
-        </div>
-      </Show>
+      <TranslationInput
+        show={translation.showTranslation()}
+        value={translation.translation()}
+        isTranslating={translation.isTranslating()}
+        onInput={translation.setTranslation}
+        onKeyDown={translation.handleKeyDown}
+        ref={(el) => (translation.inputRef = el)}
+      />
     </>
   )
 }
