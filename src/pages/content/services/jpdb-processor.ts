@@ -1,3 +1,4 @@
+// services/jpdb-processor.ts
 import { ChromeMessage, RawJpdbBatchProcessingResult } from "../types"
 
 export class JpdbProcessor {

@@ -1,6 +1,7 @@
 // VocabularyTooltip.tsx
 import { For, Show, createEffect, createSignal } from "solid-js"
 import { useDeckSelection } from "../hooks/useDeckSelection"
+import { useKeybinds } from "../hooks/useKeybinds"
 import { useTranslationInput } from "../hooks/useTranslationInput"
 import { addToDeck, getTranslation, reviewWord } from "../services/jpdb-api"
 import type { VocabularyEntry } from "../types"
@@ -124,6 +125,25 @@ export default function VocabularyTooltip(props: {
       setIsAdding(false)
     }
   }
+
+  useKeybinds({
+    // Set up event listeners
+    onReview: (rating) => {
+      if (!translation.showTranslation()) {
+        handleReview(rating)
+      }
+    },
+    onSpecialDeck: (deckId) => {
+      if (!translation.showTranslation()) {
+        handleSpecialDeck(deckId)
+      }
+    },
+    onAdd: () => {
+      if (!translation.showTranslation()) {
+        handleAddToDeck()
+      }
+    },
+  })
 
   return (
     <>

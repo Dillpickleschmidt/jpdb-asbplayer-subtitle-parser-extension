@@ -215,6 +215,18 @@ export default function Options() {
             JPDB Subtitle Parser Settings
           </h1>
 
+          <div class="flex w-full justify-center">
+            <button
+              onClick={() =>
+                chrome.storage.sync.clear().then(() => window.location.reload())
+              }
+              title="Refresh other tabs to see changes"
+              class="rounded-md bg-red-400 px-4 py-2 font-medium text-black hover:bg-red-300"
+            >
+              Reset All
+            </button>
+          </div>
+
           <div>
             <h2 class="text-2xl font-bold">Decks</h2>
             <h3 class="mt-4">
