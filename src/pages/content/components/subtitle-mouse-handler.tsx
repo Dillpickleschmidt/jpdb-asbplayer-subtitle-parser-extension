@@ -5,6 +5,11 @@ import { tinykeys } from "tinykeys"
 import { ProcessedSubtitle } from "../types"
 import VocabularyTooltip from "./VocabularyTooltip"
 
+interface ResultsInterface {
+  has: (text: string) => boolean
+  get: (text: string) => ProcessedSubtitle | undefined
+}
+
 export class SubtitleMouseHandler {
   private processedResults: Map<string, ProcessedSubtitle>
   private activeSegment: HTMLElement | null = null
@@ -183,6 +188,7 @@ export class SubtitleMouseHandler {
           <VocabularyTooltip
             vocabulary={matchingVocab}
             sentence={relevantSentence}
+            processedResults={this.processedResults}
           />
         ),
         container

@@ -1,5 +1,5 @@
 import { DEFAULT_SETTINGS } from "@src/types"
-import { createEffect, createSignal } from "solid-js"
+import { createEffect, createSignal, onCleanup } from "solid-js"
 import { tinykeys } from "tinykeys"
 
 const SPECIAL_DECKS = {
@@ -13,58 +13,72 @@ export function useKeybinds(onAction: {
   onAdd: () => void
 }) {
   const [keybinds, setKeybinds] = createSignal(DEFAULT_SETTINGS.keybinds)
+  let lastActionTime = 0
+  const DEBOUNCE_TIME = 500 // Prevent multiple triggers within 500ms
   let unsubscribe: (() => void) | null = null
 
   const setupKeybindListeners = (
     currentKeybinds: typeof DEFAULT_SETTINGS.keybinds
   ) => {
+    // Clean up existing listeners before setting up new ones
     if (unsubscribe) {
       unsubscribe()
+    }
+
+    const handleAction = (action: () => void) => {
+      const now = Date.now()
+      if (now - lastActionTime >= DEBOUNCE_TIME) {
+        action()
+        lastActionTime = now
+      }
     }
 
     unsubscribe = tinykeys(window, {
       [currentKeybinds.reviewNothing]: (e) => {
         e.preventDefault()
-        onAction.onReview("nothing")
+        handleAction(() => onAction.onReview("nothing"))
       },
       [currentKeybinds.reviewSomething]: (e) => {
         e.preventDefault()
-        onAction.onReview("something")
+        handleAction(() => onAction.onReview("something"))
       },
       [currentKeybinds.reviewHard]: (e) => {
         e.preventDefault()
-        onAction.onReview("hard")
+        handleAction(() => onAction.onReview("hard"))
       },
       [currentKeybinds.reviewOkay]: (e) => {
         e.preventDefault()
-        onAction.onReview("okay")
+        handleAction(() => onAction.onReview("okay"))
       },
       [currentKeybinds.reviewEasy]: (e) => {
         e.preventDefault()
-        onAction.onReview("easy")
+        handleAction(() => onAction.onReview("easy"))
       },
       [currentKeybinds.blacklist]: (e) => {
         e.preventDefault()
-        onAction.onSpecialDeck(SPECIAL_DECKS.BLACKLIST)
+        handleAction(() => onAction.onSpecialDeck(SPECIAL_DECKS.BLACKLIST))
       },
       [currentKeybinds.neverForget]: (e) => {
         e.preventDefault()
-        onAction.onSpecialDeck(SPECIAL_DECKS.NEVER_FORGET)
+        handleAction(() => onAction.onSpecialDeck(SPECIAL_DECKS.NEVER_FORGET))
       },
       [currentKeybinds.addToDeck]: (e) => {
         e.preventDefault()
-        onAction.onAdd()
+        handleAction(() => onAction.onAdd())
       },
     })
   }
 
+  // Initial setup and chrome storage sync
   createEffect(() => {
+    // Load initial keybinds from storage
     chrome.storage.sync.get(["keybinds"], (result) => {
       const currentKeybinds = result.keybinds || DEFAULT_SETTINGS.keybinds
       setKeybinds(currentKeybinds)
       setupKeybindListeners(currentKeybinds)
     })
 
+    // Listen for keybind changes in storage
     const storageListener = (
       changes: { [key: string]: chrome.storage.StorageChange },
       namespace: string
@@ -77,12 +91,14 @@ export function useKeybinds(onAction: {
     }
 
     chrome.storage.onChanged.addListener(storageListener)
-    return () => {
+
+    // Cleanup on component unmount
+    onCleanup(() => {
       chrome.storage.onChanged.removeListener(storageListener)
       if (unsubscribe) {
         unsubscribe()
       }
-    }
+    })
   })
 
   return { keybinds }

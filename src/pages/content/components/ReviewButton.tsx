@@ -10,7 +10,7 @@ type ReviewButtonProps = {
 export function ReviewButton(props: ReviewButtonProps) {
   return (
     <button
-      class="h-8 rounded-md border border-black px-1 text-black"
+      class="h-8 text-nowrap rounded-md border border-black px-1 text-black"
       style={{ "background-color": props.color }}
       onClick={props.onClick}
       disabled={props.disabled || props.loading}

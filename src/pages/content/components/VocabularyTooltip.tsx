@@ -4,9 +4,10 @@ import { useDeckSelection } from "../hooks/useDeckSelection"
 import { useKeybinds } from "../hooks/useKeybinds"
 import { useTranslationInput } from "../hooks/useTranslationInput"
 import { addToDeck, getTranslation, reviewWord } from "../services/jpdb-api"
-import type { VocabularyEntry } from "../types"
+import type { ProcessedSubtitle, VocabularyEntry } from "../types"
 import { getCardStateClass } from "../utils/card-state"
 import { ReviewButton } from "./ReviewButton"
+import { updateWordState } from "./SubtitleStyler"
 import { TranslationInput } from "./TranslationInput"
 
 const SPECIAL_DECKS = {
@@ -30,6 +31,7 @@ const getStateClassName = (cardState: string) => {
 export default function VocabularyTooltip(props: {
   vocabulary: VocabularyEntry
   sentence: string
+  processedResults: Map<string, ProcessedSubtitle>
 }) {
   const [isAdding, setIsAdding] = createSignal(false)
   const { decks, currentDeck, tooltipButtons, handleDeckChange } =
@@ -51,6 +53,7 @@ export default function VocabularyTooltip(props: {
     try {
       setIsAdding(true)
       await reviewWord(props.vocabulary.vid, props.vocabulary.sid, rating)
+      await updateWordState(props.sentence, props.vocabulary.vid)
     } catch (error) {
       console.error("Error reviewing word:", error)
       alert("Failed to review word. Please try again.")
@@ -63,6 +66,7 @@ export default function VocabularyTooltip(props: {
     try {
       setIsAdding(true)
       await addToDeck(props.vocabulary.vid, props.vocabulary.sid, deckId)
+      await updateWordState(props.sentence, props.vocabulary.vid)
     } catch (error) {
       console.error("Error adding word to special deck:", error)
       alert("Failed to add word. Please try again.")
@@ -86,6 +90,8 @@ export default function VocabularyTooltip(props: {
         selectedDeckId,
         props.sentence
       )
+      console.log("here")
+      await updateWordState(props.sentence, props.vocabulary.vid)
       alert("Word successfully added to deck!")
     } catch (error) {
       console.error("Error adding word to deck:", error)
