@@ -10,6 +10,8 @@ I had issues getting jpd-breader to work consistently with ASB-Player. Also I di
 
 Also ASB-Player's subtitles look ugly and it doesn't offer the customization I was looking for. Since I'm re-styling the spans for colorization anyway, this adds much nicer outlines as well.
 
+I also added various quality of life improvements in addition to better UI. See the [Features](#features) section for more details.
+
 ## Stack
 
 - [SolidJS](https://www.solidjs.com/)
@@ -24,6 +26,16 @@ Also ASB-Player's subtitles look ugly and it doesn't offer the customization I w
 ![Settings Preview](src/assets/img/settings_page_preview.png)
 
 ## Installation
+
+1. Download and unzip the latest release
+2. Load Extension on Chrome
+   1. Open - Chrome browser
+   2. Access - chrome://extensions
+   3. Check - Developer mode
+   4. Find - Load unpacked extension
+   5. Select - Choose the folder you unzipped
+
+## Dev Installation
 
 1. Clone new repository.
 2. Run `npm i`
@@ -56,6 +68,11 @@ Also ASB-Player's subtitles look ugly and it doesn't offer the customization I w
 - Fullscreen support
 - Auto translate sentence when adding word to deck or manually specify with "Add+" button
 - Completely custom CSS if you want to modify the subtitle appearance (+ same class selectors as jpd-breader)
+
+### Features Missing
+
+- touchscreen support
+- forq
 
 ### Notes
 
