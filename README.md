@@ -1,64 +1,62 @@
-<div align="center">
-<img width="128" src="/src/assets/img/logo.svg" alt="logo"/>
-<h1> Chrome Extension Boilerplate with<br/>SolidJS + Vite + TypeScript + Manifest V3 + Hot Relaod</h1>
+# JPDB + ASB-Player Subtitle Parser
 
-![](https://img.shields.io/badge/Typescript-3178C6?style=flat-square&logo=typescript&logoColor=white)
-![](https://badges.aleen42.com/src/vitejs.svg)
+Chrome extension for ASB-Player sentence mining with JPDB.
 
-<!-- ![GitHub action badge](https://github.com/thearturca/solid-chrome-extension-template/actions/workflows/build.yml/badge.svg) -->
+![Main Preview](src/assets/img/main_preview.png)
 
-</div>
+## Why not jpd-breader?
 
-## Intro <a name="intro"></a>
+I had issues getting jpd-breader to work consistently with ASB-Player. Also I didn't find its UI very appealing.
 
-> [!IMPORTANT]
-> This is updated version of [solid-chrome-extension-template](https://github.com/fuyutarow/solid-chrome-extension-template). 
-> All dependencies are updated. Jest replaced with Vitest.
+Also ASB-Player's subtitles look ugly and it doesn't offer the customization I was looking for. Since I'm re-styling the spans for colorization anyway, this adds much nicer outlines as well.
 
-This boilerplate is made for creating chrome extensions using SolidJS and Typescript.
-
-> The focus was on improving the build speed and development experience with Vite.
-
-## Features <a name="features"></a>
+## Stack
 
 - [SolidJS](https://www.solidjs.com/)
 - [TypeScript](https://www.typescriptlang.org/)
-- [Vite](https://vitejs.dev/)
-- [Vitest](https://vitest.dev/)
-- [SASS](https://sass-lang.com/)
-- [ESLint](https://eslint.org/)
-- [Prettier](https://prettier.io/)
 - [Chrome Extension Manifest Version 3](https://developer.chrome.com/docs/extensions/mv3/intro/)
-- Hot Reload (Live reload)
 
-## Installation <a name="installation"></a>
+<div style="display: flex; gap: 5px;">
+   <img src="src/assets/img/popup_preview.png" alt="Popup Preview" width="300"/>
+   <img src="src/assets/img/popup_preview_2.png" alt="Popup Preview" width="300"/>
+</div>
 
-### Procedures <a name="procedures"></a>
+![Settings Preview](src/assets/img/settings_page_preview.png)
 
-1. At top right of this page, click on **Use this template** > **Create a new repository**.
-2. Clone new repository.
-3. Change `name` and `description` in package.json => **Auto synchronize with manifest**
-4. Run `yarn` or `npm i` (check your node version >= 20)
-5. Run `yarn dev` or `npm run dev`
-6. Load Extension on Chrome
+## Installation
+
+1. Clone new repository.
+2. Run `npm i`
+3. Run `npm run dev`
+4. Load Extension on Chrome
    1. Open - Chrome browser
    2. Access - chrome://extensions
    3. Check - Developer mode
    4. Find - Load unpacked extension
    5. Select - `dist` folder in this project (after dev or build)
-7. If you want to build in production, Just run `yarn build` or `npm run build`.
+5. If you want to build in production, Just run `npm run build`.
 
-## Screenshots <a name="screenshots"></a>
+## How To Use
 
-<img width="957" alt="image" src="https://user-images.githubusercontent.com/14998939/182227580-31e390cd-386b-426a-adba-e8a31a2f303d.png">
+1. Pin and click on this extension's icon and add your jpdb api key (found in the bottom of jpdb.io's settings page)
+2. Open a video and add the subtitle via ASB-Player and it should auto parse everything (you should notice the subtitles' styles change)
+3. Click the extension's icon next to your url bar again and click the Settings button. At the top of the page you'll see a list of your decks. Check the ones you want to appear in the tooltip dropdown.
+4. Go back to the video and you should see the decks you checked appear in your dropdown. Clicking any "add" button will add the word to the dropdown's currently selected deck.
 
-## Documents <a name="documents"></a>
+> If you want to use hotkeys to speed up review/adding, check out the Settings page again.
 
-- [Vite Plugin](https://vitejs.dev/guide/api-plugin.html)
-- [ChromeExtension](https://developer.chrome.com/docs/extensions/mv3/)
-- [Rollup](https://rollupjs.org/guide/en/)
-- [Rollup-plugin-chrome-extension](https://www.extend-chrome.dev/rollup-plugin)
+## Features
 
-## Support
+- Add words to jpdb deck with sentences + translations
+- Customizable subtitle colorization based on word's state using nice, user friendly html color pickers
+- Choose which buttons you want to appear in the tooltip
+- Review words directly while watching (enable buttons for it in the extension's Settings page)
+- Customizable button colorization
+- Choose which deck you want to add to on the fly
+- Fullscreen support
+- Auto translate sentence when adding word to deck or manually specify with "Add+" button
+- Completely custom CSS if you want to modify the subtitle appearance (+ same class selectors as jpd-breader)
 
-If you found this template helpful and want to support, please [donate](https://boosty.to/thearturca/single-payment/donation/495699/target?share=target_link)
+### Notes
+
+This only works with ASB-Player and does not parse anything else. Maybe someday I'll add support for other stuff :D
