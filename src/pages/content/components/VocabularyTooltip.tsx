@@ -10,11 +10,6 @@ import { ReviewButton } from "./ReviewButton"
 import { updateWordState } from "./SubtitleStyler"
 import { TranslationInput } from "./TranslationInput"
 
-const SPECIAL_DECKS = {
-  BLACKLIST: 1879048194,
-  NEVER_FORGET: 1879048193,
-} as const
-
 // Helper to get the appropriate class for a card state
 const getStateClassName = (cardState: string) => {
   let state = cardState
@@ -62,7 +57,7 @@ export default function VocabularyTooltip(props: {
     }
   }
 
-  const handleSpecialDeck = async (deckId: number) => {
+  const handleSpecialDeck = async (deckId: "blacklist" | "never-forget") => {
     try {
       setIsAdding(true)
       await addToDeck(props.vocabulary.vid, props.vocabulary.sid, deckId)
@@ -174,6 +169,7 @@ export default function VocabularyTooltip(props: {
               <select
                 name="decks"
                 id="deck-select"
+                title="Go to the extension Settings page and check the decks you want to appear in this list."
                 class="max-w-24 bg-black text-right"
                 value={currentDeck()}
                 onChange={handleDeckChange}
@@ -271,7 +267,7 @@ export default function VocabularyTooltip(props: {
             <ReviewButton
               label="Blackl."
               color={tooltipButtons().colors.blacklist}
-              onClick={() => handleSpecialDeck(SPECIAL_DECKS.BLACKLIST)}
+              onClick={() => handleSpecialDeck("blacklist")}
               disabled={isAdding()}
               loading={isAdding()}
             />
@@ -280,7 +276,7 @@ export default function VocabularyTooltip(props: {
             <ReviewButton
               label="Never F."
               color={tooltipButtons().colors.never_forget}
-              onClick={() => handleSpecialDeck(SPECIAL_DECKS.NEVER_FORGET)}
+              onClick={() => handleSpecialDeck("never-forget")}
               disabled={isAdding()}
               loading={isAdding()}
             />

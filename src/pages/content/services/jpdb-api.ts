@@ -12,7 +12,7 @@ export async function getTranslation(text: string): Promise<string> {
 export async function addToDeck(
   vid: number,
   sid: number,
-  deckId: number,
+  deckId: number | "blacklist" | "never-forget",
   sentence?: string,
   translation?: string
 ): Promise<void> {

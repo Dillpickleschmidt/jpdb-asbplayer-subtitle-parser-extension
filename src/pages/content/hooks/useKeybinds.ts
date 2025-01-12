@@ -2,14 +2,9 @@ import { DEFAULT_SETTINGS } from "@src/types"
 import { createEffect, createSignal, onCleanup } from "solid-js"
 import { tinykeys } from "tinykeys"
 
-const SPECIAL_DECKS = {
-  BLACKLIST: 1879048194,
-  NEVER_FORGET: 1879048193,
-} as const
-
 export function useKeybinds(onAction: {
   onReview: (rating: string) => void
-  onSpecialDeck: (deckId: number) => void
+  onSpecialDeck: (deckId: "blacklist" | "never-forget") => void
   onAdd: () => void
 }) {
   const [keybinds, setKeybinds] = createSignal(DEFAULT_SETTINGS.keybinds)
@@ -56,11 +51,11 @@ export function useKeybinds(onAction: {
       },
       [currentKeybinds.blacklist]: (e) => {
         e.preventDefault()
-        handleAction(() => onAction.onSpecialDeck(SPECIAL_DECKS.BLACKLIST))
+        handleAction(() => onAction.onSpecialDeck("blacklist"))
       },
       [currentKeybinds.neverForget]: (e) => {
         e.preventDefault()
-        handleAction(() => onAction.onSpecialDeck(SPECIAL_DECKS.NEVER_FORGET))
+        handleAction(() => onAction.onSpecialDeck("never-forget"))
       },
       [currentKeybinds.addToDeck]: (e) => {
         e.preventDefault()
