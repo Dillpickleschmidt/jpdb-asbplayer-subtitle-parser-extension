@@ -15,11 +15,11 @@ const manifest = defineManifest(async () => ({
   description: packageJson.description,
   options_page: "src/pages/options/index.html",
   background: { service_worker: "src/pages/background/index.ts" },
-  host_permissions: ["https://ichi.moe/*"],
-  permissions: ["storage"],
+  // host_permissions: [],
+  permissions: ["storage", "activeTab"],
   action: {
     default_popup: "src/pages/popup/index.html",
-    default_icon: "icons/34x34.png",
+    default_icon: "icons/32x32.png",
   },
   icons: {
     "128": "icons/128x128.png",

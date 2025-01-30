@@ -26,7 +26,7 @@ export class SubtitleMouseHandler {
     // Load keybinds from storage
     const result = await chrome.storage.sync.get(["keybinds"])
     const keybinds = result.keybinds || DEFAULT_SETTINGS.keybinds
-    console.log("Loading keybinds:", keybinds) // Debug log
+    // console.log("Loading keybinds:", keybinds) // Debug log
     this.setupKeybindListener(keybinds.showPopup)
 
     // Listen for storage changes
@@ -50,7 +50,7 @@ export class SubtitleMouseHandler {
       this.unsubscribe()
     }
 
-    console.log("Setting up listener for:", keybindStr) // Debug log
+    // console.log("Setting up listener for:", keybindStr) // Debug log
 
     // Set up new keybind listener using tinykeys
     this.unsubscribe = tinykeys(window, {

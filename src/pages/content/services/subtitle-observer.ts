@@ -1,3 +1,4 @@
+// subtitle-observer.ts
 import { createFrameInfoListener } from "./frame-handlers"
 
 const SUBTITLE_SELECTOR = `
@@ -137,7 +138,8 @@ export const createOffscreenSubtitleObserver = (
   updateCallback: (element: HTMLElement) => void,
   onComplete: () => void
 ) => {
-  const offscreenProcessedTexts = new Set<string>() // Cache for processed subtitles
+  const offscreenProcessedTexts = new Set<string>()
+  let lastProcessedCount = 0 // Track the last processed count
 
   const offscreenObserver = new MutationObserver((mutations) => {
     const newSubtitles: HTMLElement[] = []
@@ -156,9 +158,9 @@ export const createOffscreenSubtitleObserver = (
               )
 
           elements.forEach((el) => {
-            const text = el.textContent?.trim() || ""
+            const text = el.textContent?.replace(/[+-]\d+ms/g, "").trim() || ""
             if (!offscreenProcessedTexts.has(text)) {
-              offscreenProcessedTexts.add(text) // Mark as processed
+              offscreenProcessedTexts.add(text)
               newSubtitles.push(el as HTMLElement)
             }
           })
@@ -166,10 +168,16 @@ export const createOffscreenSubtitleObserver = (
       })
     })
 
-    if (newSubtitles.length > 0) {
-      // Process only new subtitles
+    // Only process if we have a significant change in subtitle count (>10)
+    const countDiff = Math.abs(
+      offscreenProcessedTexts.size - lastProcessedCount
+    )
+    if (countDiff > 10 && newSubtitles.length > 0) {
+      lastProcessedCount = offscreenProcessedTexts.size
       newSubtitles.forEach((el) => updateCallback(el))
-      console.log("Offscreen subtitles processing complete:", newSubtitles)
+      console.log(
+        `Offscreen subtitles processing complete: ${newSubtitles.length} new subtitles`
+      )
       onComplete()
     }
   })
@@ -186,6 +194,7 @@ export const createOffscreenSubtitleObserver = (
   const unbind = () => {
     offscreenObserver.disconnect()
     offscreenProcessedTexts.clear()
+    lastProcessedCount = 0
   }
 
   return { bind, unbind }

@@ -1,3 +1,4 @@
+// SubtitleStyler.ts
 import { createEffect, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { JpdbProcessor } from "../services/jpdb-processor"
@@ -12,6 +13,7 @@ const [subtitleStore, setSubtitleStore] = createStore({
   results: new Map<string, ProcessedSubtitle>(),
 })
 let currentProcessingPromise: Promise<void> | null = null
+let hasProcessedFirstSubtitle = false
 let currentOnscreenSubtitle: string | null = null
 let lastProcessedBatch: string | null = null
 let mouseHandler: SubtitleMouseHandler | null = null
@@ -66,7 +68,7 @@ export function initializeSubtitleHandler(): void {
 }
 
 function cacheOffscreenSubtitle(element: HTMLElement): void {
-  const text = element.textContent?.trim()
+  const text = element.textContent?.replace(/[+-]\d+ms/g, "").trim()
   if (text && !cachedSubtitles.includes(text)) {
     cachedSubtitles.push(text)
   }
@@ -152,23 +154,22 @@ async function processOffscreenSubtitles(element?: HTMLElement): Promise<void> {
 }
 
 function processOnscreenSubtitle(element: HTMLElement): void {
-  const text = element.textContent?.trim()
+  const text = element.textContent?.replace(/[+-]\d+ms/g, "").trim()
   if (!text) return
 
-  // Keep track of the full subtitle text for word state updates
   currentOnscreenSubtitle = text
 
+  // If we have already processed this subtitle, just display it
   if (subtitleStore.results.has(text)) {
     updateSubtitleDisplay(element, subtitleStore.results.get(text)!)
     return
   }
 
-  if (!currentProcessingPromise) {
-    currentProcessingPromise = processOffscreenSubtitles(element).finally(
-      () => {
-        currentProcessingPromise = null
-      }
-    )
+  // Only process if this is the first subtitle and we haven't processed it yet
+  if (!hasProcessedFirstSubtitle) {
+    hasProcessedFirstSubtitle = true
+    cachedSubtitles.push(text)
+    processOffscreenSubtitles(element)
   }
 }
 
