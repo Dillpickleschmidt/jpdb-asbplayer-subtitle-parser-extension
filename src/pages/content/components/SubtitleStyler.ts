@@ -140,6 +140,7 @@ async function processOffscreenSubtitles(element?: HTMLElement): Promise<void> {
       }
     })
 
+    // console.log("New results:", newResults)
     updateResults(newResults)
     lastProcessedBatch = batchKey
     console.log(
@@ -154,40 +155,58 @@ async function processOffscreenSubtitles(element?: HTMLElement): Promise<void> {
 }
 
 function processOnscreenSubtitle(element: HTMLElement): void {
-  const text = element.textContent?.replace(/[+-]\d+ms/g, "").trim()
-  if (!text) return
+  // Get either all lines in jss49 container or just the single element
+  const container = element.closest("div.jss49")
+  const elements = container
+    ? Array.from(container.querySelectorAll("p.subtitle-line:not(.hidden)"))
+    : [element]
 
-  currentOnscreenSubtitle = text
-
-  // If we have already processed this subtitle, just display it
-  if (subtitleStore.results.has(text)) {
-    updateSubtitleDisplay(element, subtitleStore.results.get(text)!)
-    return
-  }
-
-  // Only process if this is the first subtitle and we haven't processed it yet
-  if (!hasProcessedFirstSubtitle) {
+  // If this is our first subtitle encounter, cache all lines and trigger processing
+  if (!hasProcessedFirstSubtitle && elements.length > 0) {
     hasProcessedFirstSubtitle = true
-    cachedSubtitles.push(text)
-    processOffscreenSubtitles(element)
+    elements.forEach((el) => {
+      const text = el.textContent?.replace(/[+-]\d+ms/g, "").trim()
+      if (text && !cachedSubtitles.includes(text)) {
+        cachedSubtitles.push(text)
+      }
+    })
+    processOffscreenSubtitles(elements[0] as HTMLElement)
   }
+
+  // Style each element that has been processed
+  elements.forEach((el) => {
+    const text = el.textContent?.replace(/[+-]\d+ms/g, "").trim()
+    if (text) {
+      currentOnscreenSubtitle = text
+      if (subtitleStore.results.has(text)) {
+        updateSubtitleDisplay(
+          el as HTMLElement,
+          subtitleStore.results.get(text)!
+        )
+      }
+    }
+  })
 }
 
 function updateSubtitleDisplay(
   element: HTMLElement,
   subtitleData: ProcessedSubtitle
 ): void {
-  const crSubtitleSpan = document.createElement("span")
-  crSubtitleSpan.className = "cr-subtitle"
+  const crSubtitleDiv = document.createElement("div")
+  crSubtitleDiv.className = "cr-subtitle"
+  crSubtitleDiv.style.position = "relative"
+  crSubtitleDiv.style.zIndex = "3" // Ensures subtitle stays above effects
+
+  element.classList.add("hidden")
+  element.classList.remove("subtitle-line")
+  element.removeAttribute("style")
 
   const sortedVocab = [...subtitleData.vocabulary].sort(
     (a, b) => a.position - b.position
   )
   let currentPosition = 0
 
-  // Process each vocabulary entry and any text between entries
-  for (const vocabEntry of sortedVocab) {
-    // Add any unprocessed text before the current vocabulary entry
+  sortedVocab.forEach((vocabEntry) => {
     if (vocabEntry.position > currentPosition) {
       const unparsedText = subtitleData.originalText.slice(
         currentPosition,
@@ -197,11 +216,10 @@ function updateSubtitleDisplay(
         const span = document.createElement("span")
         span.className = "jpdb-unparsed"
         span.textContent = unparsedText
-        crSubtitleSpan.appendChild(span)
+        crSubtitleDiv.appendChild(span)
       }
     }
 
-    // Add the vocabulary entry with its card state
     const cardState =
       Array.isArray(vocabEntry.cardState) && vocabEntry.cardState.length > 0
         ? vocabEntry.cardState[0] === "redundant" && vocabEntry.cardState[1]
@@ -215,21 +233,19 @@ function updateSubtitleDisplay(
       vocabEntry.position,
       vocabEntry.position + vocabEntry.length
     )
-    crSubtitleSpan.appendChild(wordSpan)
+    crSubtitleDiv.appendChild(wordSpan)
 
     currentPosition = vocabEntry.position + vocabEntry.length
-  }
+  })
 
-  // Add any remaining unprocessed text
   if (currentPosition < subtitleData.originalText.length) {
     const span = document.createElement("span")
     span.className = "jpdb-unparsed"
     span.textContent = subtitleData.originalText.slice(currentPosition)
-    crSubtitleSpan.appendChild(span)
+    crSubtitleDiv.appendChild(span)
   }
 
-  element.classList.add("hidden")
-  element.parentNode?.insertBefore(crSubtitleSpan, element.nextSibling)
+  element.parentNode?.insertBefore(crSubtitleDiv, element.nextSibling)
 }
 
 // Export for use in other components

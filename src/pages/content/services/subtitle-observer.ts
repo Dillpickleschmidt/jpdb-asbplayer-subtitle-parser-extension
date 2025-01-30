@@ -3,7 +3,8 @@ import { createFrameInfoListener } from "./frame-handlers"
 
 const SUBTITLE_SELECTOR = `
   .asbplayer-subtitles-container-bottom .asbplayer-subtitles span,
-  .asbplayer-fullscreen-subtitles span
+  .asbplayer-fullscreen-subtitles span,
+  div.jss49 div p.subtitle-line
 `.trim()
 
 export const createSubtitleObserver = (
@@ -46,10 +47,7 @@ export const createSubtitleObserver = (
             return
           }
 
-          if (
-            node.matches(SUBTITLE_SELECTOR) &&
-            !node.classList.contains("cr-subtitle")
-          ) {
+          if (node.matches(SUBTITLE_SELECTOR)) {
             safeUpdateCallback(node)
           }
 
@@ -133,13 +131,13 @@ export const createSubtitleObserver = (
   return { bind, unbind }
 }
 
-// Offscreen Observer (Unchanged)
+// Offscreen Observer
 export const createOffscreenSubtitleObserver = (
   updateCallback: (element: HTMLElement) => void,
   onComplete: () => void
 ) => {
   const offscreenProcessedTexts = new Set<string>()
-  let lastProcessedCount = 0 // Track the last processed count
+  let lastProcessedCount = 0
 
   const offscreenObserver = new MutationObserver((mutations) => {
     const newSubtitles: HTMLElement[] = []
@@ -148,12 +146,12 @@ export const createOffscreenSubtitleObserver = (
       mutation.addedNodes.forEach((node) => {
         if (node instanceof HTMLElement) {
           const elements = node.matches(
-            "body > div.asbplayer-offscreen > div > span"
+            "body > div.asbplayer-offscreen > div > p, body > div.asbplayer-offscreen > div > span"
           )
             ? [node]
             : Array.from(
                 node.querySelectorAll(
-                  "body > div.asbplayer-offscreen > div > span"
+                  "body > div.asbplayer-offscreen > div > p, body > div.asbplayer-offscreen > div > span"
                 )
               )
 
