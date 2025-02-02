@@ -1,4 +1,11 @@
-# JPDB + ASB-Player Subtitle Parser
+# DEPRECATED
+
+This repo was always just for seeing what was possible for me to do. I've now ported it to build on top of a much more stable extension with greater functionality.
+See [anki-jpdb.reader-extension](https://github.com/Dillpickleschmidt/anki-jpdb.reader-extension) for the new version.
+
+\*the new version is built on top of Kagu-chan's [anki-jpdb.breader](https://github.com/Kagu-chan/anki-jpdb.reader) (which is also inspired from Max Kamps' [jpd-breader](https://github.com/max-kamps/jpd-breader))
+
+## JPDB + ASB-Player Subtitle Parser
 
 Chrome extension for ASB-Player sentence mining with JPDB.
 
